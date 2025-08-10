@@ -1,5 +1,5 @@
 console.log("compact-light-card.js loaded!");
-window.left_offset = 11;
+window.left_offset = 14;
 
 class CompactLightCard extends HTMLElement {
   constructor() {
@@ -92,10 +92,10 @@ class CompactLightCard extends HTMLElement {
         }
 
         .brightness {
-          margin-left: -11px;
+          margin-left: -14px;
           border-top-right-radius: 12px;
           border-bottom-right-radius: 12px;
-          width: calc(100% + 11px);
+          width: calc(100% + 14px);
           height: 100%;
           background: red;
           transition: background 0.6s ease;
