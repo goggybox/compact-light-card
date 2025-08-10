@@ -10,6 +10,7 @@ class CompactLightCard extends HTMLElement {
     this.startWidth = 0;
     this.ignoreNextStateUpdate = false; // prevents jitter when stopping dragging
     this.supportsBrightness = true;
+    this.pendingUpdate = null;
     this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -25,13 +26,13 @@ class CompactLightCard extends HTMLElement {
         }
 
         .card-container {
-          width: 100%;
           max-width: 500px;
           height: var(--height);
           background: var(--card-background-color);
           border-radius: var(--icon-border-radius);
           margin: 0 auto;
-          margin-top: 30px;
+          margin-right: 5px;
+          margin-left: 5px;
           overflow: hidden;
         }
 
@@ -70,6 +71,7 @@ class CompactLightCard extends HTMLElement {
 
         .icon ha-icon {
           --mdc-icon-size: 32px;
+          filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
         }
 
         .content {
@@ -104,6 +106,7 @@ class CompactLightCard extends HTMLElement {
           background: var(--light-primary-colour);
           border-top-right-radius: 12px;
           border-bottom-right-radius: 12px;
+          box-shadow: rgba(0, 0, 0, 0.1) 0px 5px 15px;
           transition: width 0.6s ease;
         }
 
@@ -211,6 +214,8 @@ class CompactLightCard extends HTMLElement {
         displayText = "On";
         brightnessPercent = 100;
       }
+    } else if (state == "unavailable") {
+      displayText = "Unavailable";
     }
     // colour
     let primaryColour = "#ff890e";
@@ -218,7 +223,7 @@ class CompactLightCard extends HTMLElement {
     if (state == "on" && stateObj.attributes.rgb_color) {
       const [r, g, b] = stateObj.attributes.rgb_color;
       primaryColour = `rgb(${r}, ${g}, ${b})`;
-      const gradientColour = `rgba(${r}, ${g}, ${b}, 0.15)`;
+      const gradientColour = `rgba(${r}, ${g}, ${b}, 0.30)`;
       secondaryColour = `linear-gradient(${gradientColour}, ${gradientColour}), var(--secondary-background-color)`;
     }
     // icon
@@ -309,16 +314,24 @@ class CompactLightCard extends HTMLElement {
     // update the width of the brightness bar (without applying the brightness to the light)
     const updateBarPreview = (brightness) => {
       const roundedBrightness = Math.round(brightness);
-      if (brightness !== 0) {
-        const usableWidth = getUsableWidth();
-        const effectiveWidth = (brightness / 100) * usableWidth;
-        const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
-        barEl.style.width = `${totalWidth}px`;
-        if (percentageEl) percentageEl.textContent = `${roundedBrightness}%`;
-      } else {
-        barEl.style.width = `0px`;
-        if (percentageEl) percentageEl.textContent = "Off";
+
+      if (this.pendingUpdate) {
+        cancelAnimationFrame(this.pendingUpdate);
       }
+
+      this.pendingUpdate = requestAnimationFrame(() => {
+        if (brightness !== 0) {
+          const usableWidth = getUsableWidth();
+          const effectiveWidth = (brightness / 100) * usableWidth;
+          const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
+          barEl.style.width = `${totalWidth}px`;
+          if (percentageEl) percentageEl.textContent = `${roundedBrightness}%`;
+        } else {
+          barEl.style.width = `0px`;
+          if (percentageEl) percentageEl.textContent = "Off";
+        }
+        this.pendingUpdate = null;
+      });
     };
 
     // apply actual brightness to the light (real-time)
@@ -335,7 +348,8 @@ class CompactLightCard extends HTMLElement {
           entity_id: entityId,
           brightness: clampedBrightness
         });
-      }, 50);
+        console.log("Turned light on to brightness: " + brightness);
+      }, 125);
     };
 
     // shared drag start logic
@@ -352,7 +366,6 @@ class CompactLightCard extends HTMLElement {
       // set brightness and bar to be at mouse X.
       const brightness = this.startWidth;
       updateBarPreview(brightness);
-      applyBrightness(hass, entity, brightness);
       currentBrightness = brightness;
 
       document.body.style.userSelect = "none";
@@ -360,12 +373,16 @@ class CompactLightCard extends HTMLElement {
 
     // shared drag move logic
     const onDragMove = (clientX) => {
+      // remove transition for better drag response
+      if (barEl.style.transition !== "none") {
+        barEl.style.transition = "none";
+      }
+
       const dx = clientX - this.startX;
       const rect = contentEl.getBoundingClientRect();
       const deltaPercent = (dx / rect.width) * 100;
       const newBrightness = Math.max(0, Math.min(100, this.startWidth + deltaPercent));
       updateBarPreview(newBrightness);
-      applyBrightness(hass, entity, newBrightness);
       currentBrightness = newBrightness;
     };
 
@@ -376,11 +393,16 @@ class CompactLightCard extends HTMLElement {
       clearTimeout(updateTimeout);
       applyBrightness(hass, entity, currentBrightness);
 
+      // re-enable transition for smooth state updates
+      if (barEl.style.transition === "none") {
+        barEl.style.transition = "width 0.6s ease";
+      }
+
       // prevent jitter
       this.ignoreNextStateUpdate = true;
       setTimeout(() => {
         this.ignoreNextStateUpdate = false;
-      }, 500);
+      }, 300);
     };
 
     // mouse held down
@@ -449,7 +471,7 @@ class CompactLightCard extends HTMLElement {
     if (nameEl) nameEl.textContent = name;
     // update displayed percentage
     if (!this.isDragging && !this.ignoreNextStateUpdate && percentageEl) {
-      if (percentageText === "Off" || percentageText === "On") {
+      if (percentageText === "Off" || percentageText === "On" || percentageText === "Unavailable") {
         percentageEl.textContent = percentageText;
       } else {
         percentageEl.textContent = percentageText + "%";
@@ -469,19 +491,13 @@ class CompactLightCard extends HTMLElement {
         const contentWidth = contentEl.clientWidth - buffer - paddingRight - 1;
         const effectiveWidth = (barWidth / 100) * contentWidth;
         const totalWidth = effectiveWidth + window.left_offset;
-        console.log("name: " + name)
-        console.log("paddingRight: " + paddingRight);
-        console.log("contentEl.clientWidth: " + contentEl.clientWidth);
-        console.log("barWidth: " + barWidth);
-        console.log("totalWidth: " + totalWidth);
-        console.log("---------------------------")
         barEl.style.width = `${totalWidth}px`;
       } else {
         barEl.style.width = `0px`;
       }
     }
     // update colours
-    if (percentageText !== "Off") {
+    if (percentageText !== "Off" && percentageText !== "Unavailable") {
       if (primaryColour) root.host.style.setProperty("--light-primary-colour", primaryColour);
       if (secondaryColour) root.host.style.setProperty("--light-secondary-colour", secondaryColour);
     }
@@ -500,7 +516,7 @@ class CompactLightCard extends HTMLElement {
     }
     // add glow effect if enabled and light is on
     const cardContainer = root.querySelector(".card-container");
-    if (this.config.glow && percentageText !== "Off" && primaryColour) {
+    if (this.config.glow && percentageText !== "Off" && percentageText !== "Unavailable" && primaryColour) {
       // Extract RGB values from primaryColour string
       const rgbMatch = primaryColour.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
       if (rgbMatch) {
@@ -515,7 +531,7 @@ class CompactLightCard extends HTMLElement {
       cardContainer.style.boxShadow = "none";
     }
     // icon colours
-    if (percentageText === "Off") {
+    if (percentageText === "Off" || percentageText === "Unavailable") {
       iconEl.style.background = "var(--off-primary-colour)";
       iconEl.style.color = "var(--off-text-colour)";
       brightnessEl.style.background = "var(--off-primary-colour)";
