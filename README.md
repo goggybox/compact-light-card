@@ -3,7 +3,7 @@
 [![HACS Compatible](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
 
 A clean, compact, and highly customisable light card for Home Assistant.
-<img width="560" height="125" alt="Image" src="https://github.com/user-attachments/assets/1b99d583-9654-448f-9bc4-ebb691ec0522" />
+<img width="560" height="125" alt="Image" src="img/img1.png" />
 
 ## Features
 - Click and drag to increase/decrease the brightness of a dimmable bulb.
@@ -12,7 +12,7 @@ A clean, compact, and highly customisable light card for Home Assistant.
 - Click on the chevron to open the "More Info" page for the light.
 
 ## Customisation
-<img width="317" height="63" alt="Image" src="https://github.com/user-attachments/assets/fe06868b-b988-4c91-8f66-38e2ffc2ae0e" />
+<img width="317" height="63" alt="Image" src="img/img2.png" />
 
 The image above shows the default configuration for the card. By default, the card will have a subtle glow when the light is on, of the same colour as the bulb (or a default orange). The following customisations can be made:
 
@@ -22,7 +22,20 @@ The image above shows the default configuration for the card. By default, the ca
 
 Examples of the customisations:
 
-<img width="560" height="331" alt="Image" src="https://github.com/user-attachments/assets/4fa39949-de05-4c0c-8a88-161507266e21" />
+<img width="560" height="331" alt="Image" src="img/img3.png" />
+
+## Installation (using HACS)
+- Open HACS in Home Assistant.
+- Select the menu icon in the top-right corner.
+- Select "Custom Repositories".
+- In the popup, enter the following:
+  - Repository: `https://github.com/goggybox/compact-light-card/`
+  - Type: `Dashboard`
+- Click "Add".
+- Now search HACS for "Custom Light Card".
+- Click "Download", and then click "Reload" when prompted.
+
+The card should now be downloaded and ready to use on your dashboards.
 
 ## License
 MIT © [goggybox](https://github.com/goggybox)
