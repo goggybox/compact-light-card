@@ -51,7 +51,7 @@ Examples of the customisations:
   - Repository: `https://github.com/goggybox/compact-light-card/`
   - Type: `Dashboard`
 - Click "Add".
-- Now search HACS for "Custom Light Card".
+- Now search HACS for "Compact Light Card".
 - Click "Download", and then click "Reload" when prompted.
 
 The card should now be downloaded and ready to use on your dashboards.
