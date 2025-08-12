@@ -14,11 +14,30 @@ A clean, compact, and highly customisable light card for Home Assistant.
 ## Customisation
 <img width="317" height="63" alt="Image" src="img/img2.png" />
 
-The image above shows the default configuration for the card. By default, the card will have a subtle glow when the light is on, of the same colour as the bulb (or a default orange). The following customisations can be made:
+The image above shows the default configuration for the card. By default, the card will have a subtle glow when the light is on, of the same colour as the bulb (or a default orange). When the light is off, the card uses standard theme colours.
 
-- `glow: false` disables the glow around the card. The glow takes the colour of the bulb (or a default orange) when the light is on, with no glow appearing when the light is off.
+The following customisations are available:
+
+- `glow: false` disables the glow around the card.
 - `icon_border: true` enables a border around the light icon, as can be seen in the "Salt Lamp" and "Mini Orb" cards in the above example.
+- `icon_border_colour: "#e0e0e0"` sets the icon border colour to the hex value "#e0e0e0".
 - `card_border: true` enables a border around the card, as can be seen in the "Mini Orb" card in the above example.
+- `card_border_colour: "#e0e0e0"` sets the card border colour to the hex value "#e0e0e0".
+- `off_colours:` customises the colour of the card background and text when the light is off.
+  ```
+  off_colours:
+    background: "#e0e0e0"
+    text: "#e0e0e0"
+  ```
+  You can also set separate colours for light vs dark mode:
+  ```
+  off_colours:
+    light:
+      background: "#e0e0e0"
+      text: "#e0e0e0"
+    dark:
+      background: "#8a8a8a"
+      text: "#8a8a8a"
 
 Examples of the customisations:
 
