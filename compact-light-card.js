@@ -22,6 +22,9 @@ class CompactLightCard extends HTMLElement {
 
           --off-background-colour: var(--disabled-color);
           --off-text-colour: var(--secondary-text-color);
+
+          --icon-border-colour: var(--primary-card-color);
+          --card-border-colour: var(--primary-card-color);
         }
 
         .card-container {
@@ -54,7 +57,7 @@ class CompactLightCard extends HTMLElement {
           width: 100%;
           height: 100%;
           background: var(--off-primary-colour);
-          border: 3px solid var(--card-background-color);
+          border: 3px solid var(--icon-border-color);
           color: var(--off-text-colour);
           border-radius: var(--icon-border-radius);
           display: flex;
@@ -79,7 +82,8 @@ class CompactLightCard extends HTMLElement {
           z-index: 1;
           box-sizing: border-box;
           padding: 3px 3px 3px 5px;
-          margin-left: -5px;
+          background: var(--card-border-colour);
+          margin-left: -15px;
           flex: 1;
           position: relative;
           display: flex;
@@ -182,7 +186,9 @@ class CompactLightCard extends HTMLElement {
       glow: config.glow !== false,
       icon_border: config.icon_border === true,
       card_border: config.card_border === true,
-      off_colours: config.off_colours || null
+      off_colours: config.off_colours || null,
+      icon_border_colour: config.icon_border_colour,
+      card_border_colour: config.card_border_colour
     };
 
     // validate off_colours structure
@@ -345,6 +351,22 @@ class CompactLightCard extends HTMLElement {
       // reset variables to defaults as in CSS styling.
       this.style.removeProperty("--off-background-colour");
       this.style.removeProperty("--off-text-colour");
+    }
+
+    // apply icon border colour
+    if (this.config.icon_border_colour) {
+      this.style.setProperty("--icon-border-colour", this.config.icon_border_colour);
+    } else {
+      // reset to default
+      this.style.removeProperty("--icon-border-colour");
+    }
+
+    // apply card border colour
+    if (this.config.card_border_colour) {
+      this.style.setProperty("--card-border-colour", this.config.card_border_colour);
+    } else {
+      // reset to default
+      this.style.removeProperty("--card-border-colour");
     }
 
     const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
