@@ -1,5 +1,5 @@
 console.log("compact-light-card.js loaded!");
-window.left_offset = 14;
+window.left_offset = 20;
 
 class CompactLightCard extends HTMLElement {
   constructor() {
@@ -8,9 +8,9 @@ class CompactLightCard extends HTMLElement {
     this.isDragging = false;
     this.startX = 0;
     this.startWidth = 0;
-    this.ignoreNextStateUpdate = false; // prevents jitter when stopping dragging
     this.supportsBrightness = true;
     this.pendingUpdate = null;
+    this._hass = null;
     this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -92,10 +92,10 @@ class CompactLightCard extends HTMLElement {
         }
 
         .brightness {
-          margin-left: -14px;
+          margin-left: -20px;
           border-top-right-radius: 12px;
           border-bottom-right-radius: 12px;
-          width: calc(100% + 14px);
+          width: calc(100% + 20px);
           height: 100%;
           background: red;
           transition: background 0.6s ease;
@@ -187,23 +187,75 @@ class CompactLightCard extends HTMLElement {
 
   }
 
-  set hass(hass) {
-    if (!this.shadowRoot) return;
+  connectedCallback() {
+    // create ResizeObserver once when the card is attached to DOM
+    // fixes bug of duplicate ResizeObservers
+    if (!this._resizeObserver) {
+      this._resizeObserver = new ResizeObserver(() => {
+        if (!this.isDragging) {
+          // runs when card's container has changed, will refresh
+          // card to better fit the container.
+          this._refreshCard();
+        }
+      });
+
+      if (this.shadowRoot.querySelector(".card-container")) {
+        this._resizeObserver.observe(this.shadowRoot.querySelector(".card-container"));
+      }
+    }
+  }
+
+  disconnectedCallback() {
+    // clean up
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+  }
+
+  _refreshCard() {
+    // updates card to better fit the container when the container changes.
+    // uses fresh state data, fixing stale data being displayed bug.
+    if (!this._hass || !this.config.entity) return;
+
+    const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
+
+    this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
+  }
+
+  _getCardState() {
+    // get the card's current state variables
+    if (!this._hass || !this.config.entity) {
+      return {
+        name: null,
+        displayText: null,
+        brightnessPercent: null,
+        primaryColour: null,
+        secondaryColour: null,
+        icon: null
+      };
+    }
+
+    const entity = this.config.entity;
+    const stateObj = this._hass.states[entity];
 
     // ensure entity exists and is connected
-    const entity = this.config.entity;
-    const stateObj = hass.states[entity];
     if (!stateObj) {
-      this._updateDisplay("Entity not found", "-", 0, "#9e9e9e", "#e0e0e0");
-      return;
+      return {
+        name: "Entity not found",
+        displayText: "-",
+        brightnessPercent: 0,
+        primaryColour: "#9e9e9e",
+        secondaryColour: "#e0e0e0",
+        icon: "mdi:alert"
+      };
     }
 
     const state = stateObj.state;
     const friendlyName = stateObj.attributes.friendly_name || entity.replace("light.", "");
     this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);;
 
-    // determine initial state values
-    // brightness
+    // determine brightness and display text
     let brightnessPercent = 0;
     let displayText = "Off";
     if (state == "on") {
@@ -217,7 +269,8 @@ class CompactLightCard extends HTMLElement {
     } else if (state == "unavailable") {
       displayText = "Unavailable";
     }
-    // colour
+
+    // determine colour
     let primaryColour = "#ff890e";
     let secondaryColour = "#eec59a";
     if (state == "on" && stateObj.attributes.rgb_color) {
@@ -226,10 +279,33 @@ class CompactLightCard extends HTMLElement {
       const gradientColour = `rgba(${r}, ${g}, ${b}, 0.30)`;
       secondaryColour = `linear-gradient(${gradientColour}, ${gradientColour}), var(--secondary-background-color)`;
     }
-    // icon
+
+    // determine icon
     const icon = this.config.icon;
+
+    return {
+      name: friendlyName,
+      displayText,
+      brightnessPercent,
+      primaryColour,
+      secondaryColour,
+      icon
+    };
+
+  }
+
+  set hass(hass) {
+    if (!this.shadowRoot) return;
+    this._hass = hass;
+    const entity = this.config.entity;
+    const stateObj = hass.states[entity];
+    const state = stateObj.state;
+
+    const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
+    console.log(brightnessPercent);
+
     // UPDATE CARD
-    this._updateDisplay(friendlyName, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
+    this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
 
 
     // ---------------------------------------------
@@ -287,8 +363,6 @@ class CompactLightCard extends HTMLElement {
 
         // Dispatch from the card element itself (not shadow DOM node)
         this.dispatchEvent(moreInfoEvent);
-
-        console.log("Opened more info page");
       });
 
     }
@@ -348,7 +422,6 @@ class CompactLightCard extends HTMLElement {
           entity_id: entityId,
           brightness: clampedBrightness
         });
-        console.log("Turned light on to brightness: " + brightness);
       }, 125);
     };
 
@@ -397,12 +470,6 @@ class CompactLightCard extends HTMLElement {
       if (barEl.style.transition === "none") {
         barEl.style.transition = "width 0.6s ease";
       }
-
-      // prevent jitter
-      this.ignoreNextStateUpdate = true;
-      setTimeout(() => {
-        this.ignoreNextStateUpdate = false;
-      }, 300);
     };
 
     // mouse held down
@@ -470,7 +537,7 @@ class CompactLightCard extends HTMLElement {
     // update name
     if (nameEl) nameEl.textContent = name;
     // update displayed percentage
-    if (!this.isDragging && !this.ignoreNextStateUpdate && percentageEl) {
+    if (!this.isDragging && percentageEl) {
       if (percentageText === "Off" || percentageText === "On" || percentageText === "Unavailable") {
         percentageEl.textContent = percentageText;
       } else {
@@ -483,7 +550,7 @@ class CompactLightCard extends HTMLElement {
     }
     // update bar width
     // - the provided barWidth is just a % from 0-100%, must + 14px.
-    if (!this.isDragging && !this.ignoreNextStateUpdate && barEl) {
+    if (!this.isDragging && barEl) {
       if (barWidth !== 0) {
         const buffer = 4;
         const contentStyle = getComputedStyle(contentEl);
@@ -539,24 +606,6 @@ class CompactLightCard extends HTMLElement {
       iconEl.style.background = "var(--light-secondary-colour)";
       iconEl.style.color = "var(--light-primary-colour)";
       brightnessEl.style.background = "var(--light-secondary-colour)";
-    }
-
-    // check to see if the card can fill more space.
-    // this fixes the bug where, when exiting dashboard edit view, the card doesn't fill the space completely.
-    if (!this._resizeObserver) {
-      this._resizeObserver = new ResizeObserver(() => {
-        if (!this.isDragging && !this.ignoreNextStateUpdate) {
-          this._updateDisplay(
-            name,
-            percentageText,
-            barWidth,
-            primaryColour,
-            secondaryColour,
-            icon
-          );
-        }
-      });
-      this._resizeObserver.observe(this.shadowRoot.querySelector(".card-container"));
     }
   }
 
