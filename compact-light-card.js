@@ -20,8 +20,7 @@ class CompactLightCard extends HTMLElement {
           --icon-border-radius: 15px;
           --icon-font-size: 36px;
 
-          --off-primary-colour: var(--disabled-color);
-          --off-secondary-colour: var(--secondary-background-color);
+          --off-background-colour: var(--disabled-color);
           --off-text-colour: var(--secondary-text-color);
         }
 
@@ -183,9 +182,45 @@ class CompactLightCard extends HTMLElement {
       glow: config.glow !== false,
       icon_border: config.icon_border === true,
       card_border: config.card_border === true,
+      off_colours: config.off_colours || null
     };
 
+    // validate off_colours structure
+    if (config.off_colours) {
+      if (typeof config.off_colours !== "object" || (config.off_colours.light === undefined && config.off_colours.background === undefined)) {
+        throw new Error("Compact Light Card: Invalid off_colours format.");
+      }
+    }
+
   }
+
+  _getOffColours() {
+    const offColours = this.config.off_colours;
+    if (!offColours) return null;
+
+    let bg, text;
+
+    // theme specific
+    if (offColours.light && offColours.dark) {
+      const isDarkTheme = this._hass.themes.darkMode ?? false;
+      const theme = isDarkTheme ? offColours.dark : offColours.light;
+      bg = theme.background;
+      text = theme.text;
+    } else if (offColours.background && offColours.text) {
+      bg = offColours.background;
+      text = offColours.text;
+    } else {
+      throw new Error("Compact Light Card: Invalid off_colours format.");
+    }
+
+    const isValidColour = (colour) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$|^(rgb|rgba|hsl|hsla)/.test(colour.trim());
+    if (!isValidColour(bg) || !isValidColour(text)) {
+      throw new Error("Compact Light Card: Invalid colours in off_colours config.");
+    }
+
+    return { background: bg, text };
+  }
+
 
   connectedCallback() {
     // create ResizeObserver once when the card is attached to DOM
@@ -301,8 +336,18 @@ class CompactLightCard extends HTMLElement {
     const stateObj = hass.states[entity];
     const state = stateObj.state;
 
+    // get and apply off colours if configured
+    const offColours = this._getOffColours();
+    if (offColours) {
+      this.style.setProperty("--off-background-colour", offColours.background);
+      this.style.setProperty("--off-text-colour", offColours.text);
+    } else {
+      // reset variables to defaults as in CSS styling.
+      this.style.removeProperty("--off-background-colour");
+      this.style.removeProperty("--off-text-colour");
+    }
+
     const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
-    console.log(brightnessPercent);
 
     // UPDATE CARD
     this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
@@ -599,9 +644,9 @@ class CompactLightCard extends HTMLElement {
     }
     // icon colours
     if (percentageText === "Off" || percentageText === "Unavailable") {
-      iconEl.style.background = "var(--off-primary-colour)";
+      iconEl.style.background = "var(--off-background-colour)";
       iconEl.style.color = "var(--off-text-colour)";
-      brightnessEl.style.background = "var(--off-primary-colour)";
+      brightnessEl.style.background = "var(--off-background-colour)";
     } else {
       iconEl.style.background = "var(--light-secondary-colour)";
       iconEl.style.color = "var(--light-primary-colour)";
