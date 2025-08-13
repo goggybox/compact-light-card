@@ -1,5 +1,5 @@
 console.log("compact-light-card.js loaded!");
-window.left_offset = 20;
+window.left_offset = 17;
 
 class CompactLightCard extends HTMLElement {
   constructor() {
@@ -83,7 +83,7 @@ class CompactLightCard extends HTMLElement {
           box-sizing: border-box;
           padding: 3px 3px 3px 5px;
           background: var(--card-border-colour);
-          margin-left: -15px;
+          margin-left: -20px;
           flex: 1;
           position: relative;
           display: flex;
@@ -95,12 +95,10 @@ class CompactLightCard extends HTMLElement {
         }
 
         .brightness {
-          margin-left: -20px;
           border-top-right-radius: 12px;
           border-bottom-right-radius: 12px;
-          width: calc(100% + 20px);
+          width: 100%;
           height: 100%;
-          background: red;
           transition: background 0.6s ease;
         }
 
@@ -129,6 +127,7 @@ class CompactLightCard extends HTMLElement {
           padding-left: 30px;
           font-weight: bold;
           font-size: 18px;
+          color: var(--primary-text-color);
         }
 
         .right-info {
@@ -139,6 +138,7 @@ class CompactLightCard extends HTMLElement {
 
         .percentage {
           font-size: 14px;
+          color: var(--primary-text-color);
         }
 
         .arrow {
@@ -146,7 +146,7 @@ class CompactLightCard extends HTMLElement {
           --mdc-icon-size: 28px;
           padding-top: 10px;
           padding-bottom: 10px;
-          pointer-events:
+          color: var(--primary-text-color);
         }
 
       </style>
@@ -335,6 +335,16 @@ class CompactLightCard extends HTMLElement {
 
   }
 
+  // get the usable width of the brightness bar area (minus the icon underlap)
+  getUsableWidth = () => {
+    const buffer = 4;
+    const contentEl = this.shadowRoot.querySelector(".content");
+    const contentStyle = getComputedStyle(contentEl);
+    const paddingRight = parseFloat(contentStyle.paddingRight);
+    const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
+    return contentWidth;
+  };
+
   set hass(hass) {
     if (!this.shadowRoot) return;
     this._hass = hass;
@@ -362,7 +372,7 @@ class CompactLightCard extends HTMLElement {
     }
 
     // apply card border colour
-    if (this.config.card_border_colour) {
+    if (this.config.card_border_colour && this.config.card_border === true) {
       this.style.setProperty("--card-border-colour", this.config.card_border_colour);
     } else {
       // reset to default
@@ -434,22 +444,13 @@ class CompactLightCard extends HTMLElement {
 
     }
 
-    // get the usable width of the brightness bar area (minus the icon underlap)
-    const getUsableWidth = () => {
-      const buffer = 4;
-      const contentStyle = getComputedStyle(contentEl);
-      const paddingRight = parseFloat(contentStyle.paddingRight);
-      const contentWidth = contentEl.clientWidth - buffer - paddingRight;
-      return contentWidth;
-    };
-
     // convert mouse/touch X to brightness %
     const getBrightnessFromX = (clientX) => {
       const rect = brightnessEl.getBoundingClientRect();
       let x = clientX - (rect.left + window.left_offset);
-      const effectiveWidth = rect.width - window.left_offset;
-      x = Math.max(0, Math.min(x, effectiveWidth));
-      return Math.round((x / effectiveWidth) * 100);
+      const usableWidth = this.getUsableWidth();
+      x = Math.max(0, Math.min(x, usableWidth));
+      return Math.round((x / usableWidth) * 100);
     };
 
     // update the width of the brightness bar (without applying the brightness to the light)
@@ -462,7 +463,7 @@ class CompactLightCard extends HTMLElement {
 
       this.pendingUpdate = requestAnimationFrame(() => {
         if (brightness !== 0) {
-          const usableWidth = getUsableWidth();
+          const usableWidth = this.getUsableWidth();
           const effectiveWidth = (brightness / 100) * usableWidth;
           const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
           barEl.style.width = `${totalWidth}px`;
@@ -520,8 +521,9 @@ class CompactLightCard extends HTMLElement {
 
       const dx = clientX - this.startX;
       const rect = contentEl.getBoundingClientRect();
-      const deltaPercent = (dx / rect.width) * 100;
-      const newBrightness = Math.max(0, Math.min(100, this.startWidth + deltaPercent));
+      const usableWidth = this.getUsableWidth();
+      const deltaPercent = (dx / usableWidth) * 100;
+      const newBrightness = Math.round(Math.max(0, Math.min(100, this.startWidth + deltaPercent)));
       updateBarPreview(newBrightness);
       currentBrightness = newBrightness;
     };
@@ -622,9 +624,9 @@ class CompactLightCard extends HTMLElement {
         const buffer = 4;
         const contentStyle = getComputedStyle(contentEl);
         const paddingRight = parseFloat(contentStyle.paddingRight);
-        const contentWidth = contentEl.clientWidth - buffer - paddingRight - 1;
+        const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
         const effectiveWidth = (barWidth / 100) * contentWidth;
-        const totalWidth = effectiveWidth + window.left_offset;
+        const totalWidth = Math.min(effectiveWidth + window.left_offset, contentWidth + window.left_offset - 1); // + window.left_offset
         barEl.style.width = `${totalWidth}px`;
       } else {
         barEl.style.width = `0px`;
@@ -669,10 +671,18 @@ class CompactLightCard extends HTMLElement {
       iconEl.style.background = "var(--off-background-colour)";
       iconEl.style.color = "var(--off-text-colour)";
       brightnessEl.style.background = "var(--off-background-colour)";
+
+      nameEl.style.color = "var(--off-text-colour)";
+      percentageEl.style.color = "var(--off-text-colour)";
+      root.querySelector(".arrow").style.color = "var(--off-text-colour)";
     } else {
       iconEl.style.background = "var(--light-secondary-colour)";
       iconEl.style.color = "var(--light-primary-colour)";
       brightnessEl.style.background = "var(--light-secondary-colour)";
+
+      nameEl.style.color = "var(--primary-text-color)";
+      percentageEl.style.color = "var(--primary-text-color)";
+      root.querySelector(".arrow").style.color = "var(--primary-text-color)";
     }
   }
 
