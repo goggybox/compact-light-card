@@ -1,3 +1,13 @@
+/*
+ * Compact Light Card
+ *
+ * A clean, compact, and highly customisable light card for Home Assistant.
+ *
+ * Author: goggybox
+ * License: MIT
+ */
+
+
 console.log("compact-light-card.js loaded!");
 window.left_offset = 17;
 
