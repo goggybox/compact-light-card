@@ -1,0 +1,19 @@
+name: HACS Action
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: "0 0 * * *"
+permissions:
+  contents: read
+jobs:
+  hacs:
+    name: HACS Action
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Hacs Action
+        uses: "hacs/action@main"
+        with:
+          category: "plugin"
