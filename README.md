@@ -7,7 +7,7 @@ A clean, compact, and highly customisable light card for Home Assistant.
 
 ## Features
 - Click and drag to increase/decrease the brightness of a dimmable bulb.
-- The card takes the same colour as the light, or a default orange colour for bulbs that don't support colour changing. (As seen with the "Salt Lamp" in the image above)
+- The card takes the same colour as the light, or a default orange colour for bulbs that don't support colour changing (as seen with the "Salt Lamp" in the image above). The primary and secondary colour of the card can be customised.
 - Click on the light's icon to toggle the light on/off.
 - Click on the chevron to open the "More Info" page for the light.
 
@@ -18,11 +18,13 @@ The image above shows the default configuration for the card. By default, the ca
 
 The following customisations are available:
 
+- `primary_colour: "#dbdbdb"` sets the card's primary colour to "#dbdbdb".
+- `secondary_colour: "#808080"` sets the card's secondary colour to "#808080". 
 - `glow: false` disables the glow around the card.
 - `icon_border: true` enables a border around the light icon, as can be seen in the "Salt Lamp" and "Mini Orb" cards in the above example.
-- `icon_border_colour: "#e0e0e0"` sets the icon border colour to the hex value "#e0e0e0".
+- `icon_border_colour: "#e0e0e0"` sets the icon border colour to "#e0e0e0".
 - `card_border: true` enables a border around the card, as can be seen in the "Mini Orb" card in the above example.
-- `card_border_colour: "#e0e0e0"` sets the card border colour to the hex value "#e0e0e0".
+- `card_border_colour: "#e0e0e0"` sets the card border colour to "#e0e0e0".
 - `off_colours:` customises the colour of the card background and text when the light is off.
   ```
   off_colours:
