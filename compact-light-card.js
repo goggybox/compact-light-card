@@ -23,8 +23,8 @@ class CompactLightCard extends HTMLElement {
           --off-background-colour: var(--disabled-color);
           --off-text-colour: var(--secondary-text-color);
 
-          --icon-border-colour: var(--primary-card-color);
-          --card-border-colour: var(--primary-card-color);
+          --icon-border-colour: var(--card-background-color);
+          --card-border-colour: var(--card-background-color);
         }
 
         .card-container {
@@ -57,7 +57,7 @@ class CompactLightCard extends HTMLElement {
           width: 100%;
           height: 100%;
           background: var(--off-primary-colour);
-          border: 3px solid var(--icon-border-color);
+          border: 3px solid var(--icon-border-colour);
           color: var(--off-text-colour);
           border-radius: var(--icon-border-radius);
           display: flex;
@@ -364,11 +364,11 @@ class CompactLightCard extends HTMLElement {
     }
 
     // apply icon border colour
-    if (this.config.icon_border_colour) {
+    if (this.config.icon_border_colour && this.config.icon_border === true) {
       this.style.setProperty("--icon-border-colour", this.config.icon_border_colour);
     } else {
       // reset to default
-      this.style.removeProperty("--icon-border-colour");
+      this.style.setProperty("--icon-border-colour", "var(--card-background-color)");
     }
 
     // apply card border colour
@@ -376,7 +376,7 @@ class CompactLightCard extends HTMLElement {
       this.style.setProperty("--card-border-colour", this.config.card_border_colour);
     } else {
       // reset to default
-      this.style.removeProperty("--card-border-colour");
+      this.style.setProperty("--card-border-colour", "--var(--card-background-color");
     }
 
     const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
@@ -640,15 +640,19 @@ class CompactLightCard extends HTMLElement {
     // add or remove border from icon
     if (!this.config.icon_border) {
       iconEl.classList.add("no-border");
+      console.log("REMOVE BORDER FROM ICON");
     } else {
       iconEl.classList.remove("no-border");
+      console.log("ADD BORDER TO ICON");
     }
     // add or remove border from card
     // to do this, remove the padding front .content, and from .icon-background
     if (!this.config.card_border) {
       contentEl.classList.add("no-border");
+      console.log("REMOVE BORDER FROM CARD");
     } else {
       contentEl.classList.remove("no-border");
+      console.log("ADD BORDER TO CARD");
     }
     // add glow effect if enabled and light is on
     const cardContainer = root.querySelector(".card-container");
