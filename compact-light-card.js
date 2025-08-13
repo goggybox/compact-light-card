@@ -198,7 +198,9 @@ class CompactLightCard extends HTMLElement {
       card_border: config.card_border === true,
       off_colours: config.off_colours || null,
       icon_border_colour: config.icon_border_colour,
-      card_border_colour: config.card_border_colour
+      card_border_colour: config.card_border_colour,
+      primary_colour: config.primary_colour,
+      secondary_colour: config.secondary_colour
     };
 
     // validate off_colours structure
@@ -324,9 +326,18 @@ class CompactLightCard extends HTMLElement {
     // determine colour
     let primaryColour = "#ff890e";
     let secondaryColour = "#eec59a";
-    if (state == "on" && stateObj.attributes.rgb_color) {
+
+    // use user's configured colours if provided
+    if (this.config.primary_colour) {
+      primaryColour = this.config.primary_colour;
+    } else if (state == "on" && stateObj.attributes.rgb_color) {
       const [r, g, b] = stateObj.attributes.rgb_color;
       primaryColour = `rgb(${r}, ${g}, ${b})`;
+    }
+    if (this.config.secondary_colour) {
+      secondaryColour = this.config.secondary_colour;
+    } else if (state == "on" && stateObj.attributes.rgb_color) {
+      const [r, g, b] = stateObj.attributes.rgb_color;
       const gradientColour = `rgba(${r}, ${g}, ${b}, 0.30)`;
       secondaryColour = `linear-gradient(${gradientColour}, ${gradientColour}), var(--secondary-background-color)`;
     }
