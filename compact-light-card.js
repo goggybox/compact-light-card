@@ -193,6 +193,7 @@ class CompactLightCard extends HTMLElement {
     this.config = {
       ...config,
       icon: config.icon || "mdi:lightbulb",
+      name: config.name,
       glow: config.glow !== false,
       icon_border: config.icon_border === true,
       card_border: config.card_border === true,
@@ -200,7 +201,8 @@ class CompactLightCard extends HTMLElement {
       icon_border_colour: config.icon_border_colour,
       card_border_colour: config.card_border_colour,
       primary_colour: config.primary_colour,
-      secondary_colour: config.secondary_colour
+      secondary_colour: config.secondary_colour,
+      chevron_action: config.chevron_action || { action: "hass-more-info" }
     };
 
     // validate off_colours structure
@@ -305,7 +307,8 @@ class CompactLightCard extends HTMLElement {
     }
 
     const state = stateObj.state;
-    const friendlyName = stateObj.attributes.friendly_name || entity.replace("light.", "");
+    const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace("light.", "");
+    const friendlyName = tempName.length > 30 ? tempName.slice(0, 30) + "..." : tempName;
     this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);;
 
     // determine brightness and display text
@@ -365,6 +368,94 @@ class CompactLightCard extends HTMLElement {
     const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
     return contentWidth;
   };
+
+  _performAction(actionObj) {
+    if (!actionObj || !actionObj.action || !this._hass || !this.config.entity) {
+      return;
+    }
+
+    const action = actionObj.action;
+    const entityId = this.config.entity;
+    const moreInfoEvent = new CustomEvent("hass-more-info", {
+      bubbles: true,
+      composed: true,
+      detail: { entityId },
+    });
+
+    switch (action) {
+      case "hass-more-info":
+        this.dispatchEvent(moreInfoEvent);
+        break;
+
+      case "more-info":
+        this.dispatchEvent(moreInfoEvent);
+        break;
+
+      case "toggle":
+        this._hass.callService("light", "toggle", {
+          entity_id: entityId
+        });
+        break;
+
+      case "navigate":
+        if (actionObj.navigation_path) {
+          history.pushState(null, "", actionObj.navigation_path);
+          window.dispatchEvent(new Event("location-changed"));
+        }
+        break;
+
+      case "url":
+        if (actionObj.url_path || actionObj.url) {
+          const url = actionObj.url_path || actionObj.url;
+          window.open(url, "_blank");
+        }
+        break;
+
+      case "call-service":
+        if (actionObj.service) {
+          const [domain, service] = actionObj.service.split(".", 2);
+          const serviceData = { ...actionObj.service_data };
+          if (!serviceData.entity_id) {
+            serviceData.entity_id = entityId;
+          }
+          this._hass.callService(domain, service, serviceData);
+        }
+        break;
+
+      case "perform-action":
+        if (actionObj.perform_action) {
+          // allow format:
+          /*
+            action: perform-action
+            target:
+              entity_id: light.side_lamp
+            perform_action: light.turn_on
+            data:
+              brightness_pct: 50
+              rgb_color:
+                - 237
+                - 51
+                - 59
+           */
+          const [domain, service] = actionObj.perform_action.split(".", 2);
+          const serviceData = { ...actionObj.data };
+          if (actionObj.target) {
+            serviceData.entity_id = actionObj.target.entity_id;
+          } else if (!serviceData.entity_id) {
+            serviceData.entity_id = entityId;
+          }
+          this._hass.callService(domain, service, serviceData);
+        }
+        break;
+
+      case "none":
+        break;
+
+      default:
+        console.warn("Compact-Light-Card: Unsupported action: ", action);
+
+    }
+  }
 
   set hass(hass) {
     if (!this.shadowRoot) return;
@@ -451,16 +542,7 @@ class CompactLightCard extends HTMLElement {
 
       newArrowEl.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        const entityId = this.config.entity;
-
-        const moreInfoEvent = new CustomEvent("hass-more-info", {
-          bubbles: true,
-          composed: true,
-          detail: { entityId },
-        });
-
-        // Dispatch from the card element itself (not shadow DOM node)
-        this.dispatchEvent(moreInfoEvent);
+        this._performAction(this.config.chevron_action);
       });
 
     }
@@ -485,13 +567,16 @@ class CompactLightCard extends HTMLElement {
       this.pendingUpdate = requestAnimationFrame(() => {
         if (brightness !== 0) {
           const usableWidth = this.getUsableWidth();
-          const effectiveWidth = (brightness / 100) * usableWidth;
+          const effectiveWidth = (Math.max(1, brightness) / 100) * usableWidth;
           const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
           barEl.style.width = `${totalWidth}px`;
           if (percentageEl) percentageEl.textContent = `${roundedBrightness}%`;
         } else {
-          barEl.style.width = `0px`;
-          if (percentageEl) percentageEl.textContent = "Off";
+          const usableWidth = this.getUsableWidth();
+          const effectiveWidth = (1 / 100) * usableWidth;
+          const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
+          barEl.style.width = `${totalWidth}px`;
+          if (percentageEl) percentageEl.textContent = `1%`;
         }
         this.pendingUpdate = null;
       });
@@ -516,7 +601,7 @@ class CompactLightCard extends HTMLElement {
 
     // shared drag start logic
     const onDragStart = (clientX) => {
-      if (state !== "on" || !this.supportsBrightness) {
+      if (!this.supportsBrightness) {
         return;
       }
       this.isDragging = true;
@@ -529,6 +614,14 @@ class CompactLightCard extends HTMLElement {
       const brightness = this.startWidth;
       updateBarPreview(brightness);
       currentBrightness = brightness;
+
+      if (state !== "on") {
+        const brightness255 = Math.round((brightness / 100) * 255);
+        hass.callService("light", "turn_on", {
+          entity_id: entityId,
+          brightness: Math.max(1, brightness255)
+        });
+      }
 
       document.body.style.userSelect = "none";
     };
@@ -544,7 +637,7 @@ class CompactLightCard extends HTMLElement {
       const rect = contentEl.getBoundingClientRect();
       const usableWidth = this.getUsableWidth();
       const deltaPercent = (dx / usableWidth) * 100;
-      const newBrightness = Math.round(Math.max(0, Math.min(100, this.startWidth + deltaPercent)));
+      const newBrightness = Math.round(Math.max(1, Math.min(100, this.startWidth + deltaPercent)));
       updateBarPreview(newBrightness);
       currentBrightness = newBrightness;
     };
@@ -654,26 +747,22 @@ class CompactLightCard extends HTMLElement {
       }
     }
     // update colours
-    if (percentageText !== "Off" && percentageText !== "Unavailable") {
+    if (percentageText !== "Unavailable") {
       if (primaryColour) root.host.style.setProperty("--light-primary-colour", primaryColour);
       if (secondaryColour) root.host.style.setProperty("--light-secondary-colour", secondaryColour);
     }
     // add or remove border from icon
     if (!this.config.icon_border) {
       iconEl.classList.add("no-border");
-      console.log("REMOVE BORDER FROM ICON");
     } else {
       iconEl.classList.remove("no-border");
-      console.log("ADD BORDER TO ICON");
     }
     // add or remove border from card
     // to do this, remove the padding front .content, and from .icon-background
     if (!this.config.card_border) {
       contentEl.classList.add("no-border");
-      console.log("REMOVE BORDER FROM CARD");
     } else {
       contentEl.classList.remove("no-border");
-      console.log("ADD BORDER TO CARD");
     }
     // add glow effect if enabled and light is on
     const cardContainer = root.querySelector(".card-container");
