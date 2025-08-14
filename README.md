@@ -3,7 +3,7 @@
 [![HACS Compatible](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
 
 A clean, compact, and highly customisable light card for Home Assistant.
-<img width="560" height="125" alt="Image" src="img/img1.png" />
+![Image 1](img/img1.png)
 
 ## Features
 - Click and drag to increase/decrease the brightness of a dimmable bulb.
@@ -12,7 +12,7 @@ A clean, compact, and highly customisable light card for Home Assistant.
 - Click on the chevron to open the "More Info" page for the light. This behaviour can be customised.
 
 ## Customisation
-<img width="317" height="63" alt="Image" src="img/img2.png" />
+![Image 2](img/img2.png)
 
 The image above shows the default configuration for the card. By default, the card will have a subtle glow when the light is on, of the same colour as the bulb (or a default orange). When the light is off, the card uses standard theme colours.
 
@@ -51,7 +51,7 @@ The following customisations are available:
 
 Examples of the customisations:
 
-<img width="560" height="331" alt="Image" src="img/img3.png" />
+![Image 3](img/img3.png)
 
 ## Installation (using HACS)
 - Open HACS in Home Assistant.
