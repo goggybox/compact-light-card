@@ -3,6 +3,7 @@
 [![HACS Compatible](https://img.shields.io/badge/HACS-Default-blue.svg?style=flat-square)](https://github.com/hacs/integration)
 
 A clean, compact, and highly customisable light card for Home Assistant.
+
 ![Image 1](img/img1.png)
 
 ## Features
