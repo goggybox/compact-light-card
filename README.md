@@ -1,6 +1,6 @@
 # Compact Light Card
 [![GitHub Release](https://img.shields.io/github/v/release/goggybox/compact-light-card?include_prereleases&style=flat-square)](https://github.com/goggybox/compact-light-card/releases)
-[![HACS Compatible](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
+[![HACS Compatible](https://img.shields.io/badge/HACS-Default-blue.svg?style=flat-square)](https://github.com/hacs/integration)
 
 A clean, compact, and highly customisable light card for Home Assistant.
 ![Image 1](img/img1.png)
@@ -54,17 +54,17 @@ Examples of the customisations:
 ![Image 3](img/img3.png)
 
 ## Installation (using HACS)
-- Open HACS in Home Assistant.
-- Select the menu icon in the top-right corner.
-- Select "Custom Repositories".
-- In the popup, enter the following:
-  - Repository: `https://github.com/goggybox/compact-light-card/`
-  - Type: `Dashboard`
-- Click "Add".
-- Now search HACS for "Compact Light Card".
-- Click "Download", and then click "Reload" when prompted.
 
-The card should now be downloaded and ready to use on your dashboards.
+Use this link to open the repository in HACS:
+
+[![Open repo in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=goggybox&repository=compact-light-card)
+
+Alternatively:
+
+- Open HACS in Home Assistant.
+- Search for "Compact Light Card".
+- Ensure the result has the creator as "goggybox".
+- Click download!
 
 ## License
 MIT © [goggybox](https://github.com/goggybox)
