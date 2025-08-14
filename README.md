@@ -7,7 +7,7 @@ A clean, compact, and highly customisable light card for Home Assistant.
 
 ## Features
 - Click and drag to increase/decrease the brightness of a dimmable bulb.
-- The card takes the same colour as the light, or a default orange colour for bulbs that don't support colour changing (as seen with the "Salt Lamp" in the image above). The primary and secondary colour of the card can be customised.
+- The card takes the same colour as the light, or a default orange colour for bulbs that don't support colour changing (as seen with the "Salt Lamp" in the image below). The primary and secondary colour of the card can be customised.
 - Click on the light's icon to toggle the light on/off.
 - Click on the chevron to open the "More Info" page for the light.
 
