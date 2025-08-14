@@ -747,7 +747,7 @@ class CompactLightCard extends HTMLElement {
       }
     }
     // update colours
-    if (percentageText !== "Unavailable") {
+    if (percentageText !== "Off" && percentageText !== "Unavailable") {
       if (primaryColour) root.host.style.setProperty("--light-primary-colour", primaryColour);
       if (secondaryColour) root.host.style.setProperty("--light-secondary-colour", secondaryColour);
     }
