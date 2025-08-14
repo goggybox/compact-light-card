@@ -9,7 +9,7 @@ A clean, compact, and highly customisable light card for Home Assistant.
 - Click and drag to increase/decrease the brightness of a dimmable bulb.
 - The card takes the same colour as the light, or a default orange colour for bulbs that don't support colour changing (as seen with the "Salt Lamp" in the image below). The primary and secondary colour of the card can be customised.
 - Click on the light's icon to toggle the light on/off.
-- Click on the chevron to open the "More Info" page for the light.
+- Click on the chevron to open the "More Info" page for the light. This behaviour can be customised.
 
 ## Customisation
 <img width="317" height="63" alt="Image" src="img/img2.png" />
@@ -18,6 +18,7 @@ The image above shows the default configuration for the card. By default, the ca
 
 The following customisations are available:
 
+- `name: "Light 1"` sets the displayed name to "Light 1".
 - `primary_colour: "#dbdbdb"` sets the card's primary colour to "#dbdbdb".
 - `secondary_colour: "#808080"` sets the card's secondary colour to "#808080". 
 - `glow: false` disables the glow around the card.
@@ -40,6 +41,13 @@ The following customisations are available:
     dark:
       background: "#8a8a8a"
       text: "#8a8a8a"
+- `chevron_action:` customises the action performed when the chevron is clicked. Default HA action configuration is expected:
+  ```
+  chevron_action:
+    action: url
+    url_path: https://github.com/gogybox/compact-light-card/
+  ```
+  The supported actions are `more-info`, `toggle`, `navigate`, `url`, and `perform-action`/`call-service`.
 
 Examples of the customisations:
 
