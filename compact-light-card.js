@@ -30,7 +30,7 @@ class CompactLightCard extends HTMLElement {
           --icon-border-radius: 15px;
           --icon-font-size: 36px;
 
-          --off-background-colour: var(--disabled-color);
+          --off-background-colour: var(--secondary-background-color);
           --off-text-colour: var(--secondary-text-color);
 
           --icon-border-colour: var(--card-background-color);
@@ -233,11 +233,6 @@ class CompactLightCard extends HTMLElement {
       throw new Error("Compact Light Card: Invalid off_colours format.");
     }
 
-    const isValidColour = (colour) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$|^(rgb|rgba|hsl|hsla)/.test(colour.trim());
-    if (!isValidColour(bg) || !isValidColour(text)) {
-      throw new Error("Compact Light Card: Invalid colours in off_colours config.");
-    }
-
     return { background: bg, text };
   }
 
@@ -333,13 +328,13 @@ class CompactLightCard extends HTMLElement {
     // use user's configured colours if provided
     if (this.config.primary_colour) {
       primaryColour = this.config.primary_colour;
-    } else if (state == "on" && stateObj.attributes.rgb_color) {
+    } else if (stateObj.attributes.rgb_color) {
       const [r, g, b] = stateObj.attributes.rgb_color;
       primaryColour = `rgb(${r}, ${g}, ${b})`;
     }
     if (this.config.secondary_colour) {
       secondaryColour = this.config.secondary_colour;
-    } else if (state == "on" && stateObj.attributes.rgb_color) {
+    } else if (stateObj.attributes.rgb_color) {
       const [r, g, b] = stateObj.attributes.rgb_color;
       const gradientColour = `rgba(${r}, ${g}, ${b}, 0.30)`;
       secondaryColour = `linear-gradient(${gradientColour}, ${gradientColour}), var(--secondary-background-color)`;
@@ -618,7 +613,7 @@ class CompactLightCard extends HTMLElement {
       if (state !== "on") {
         const brightness255 = Math.round((brightness / 100) * 255);
         hass.callService("light", "turn_on", {
-          entity_id: entityId,
+          entity_id: this.config.entity,
           brightness: Math.max(1, brightness255)
         });
       }
