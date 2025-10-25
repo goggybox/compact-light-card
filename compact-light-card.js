@@ -9,7 +9,7 @@
 
 
 console.log("compact-light-card.js loaded!");
-window.left_offset = 17;
+window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
   constructor() {
@@ -40,7 +40,7 @@ class CompactLightCard extends HTMLElement {
         .card-container {
           max-width: 500px;
           height: var(--height);
-          background: var(--card-background-color);
+          background: rgba(0,0,0,0.0);
           border-radius: var(--icon-border-radius);
           margin: 0 auto;
           margin-right: 5px;
@@ -50,6 +50,8 @@ class CompactLightCard extends HTMLElement {
 
         .card {
           height: var(--height);
+          background: rgba(0,0,0,0.1);
+          backdrop-filter: blur(0px);
           display: flex;
           align-items: center;
         }
@@ -81,19 +83,15 @@ class CompactLightCard extends HTMLElement {
           box-shadow: rgba(0, 0, 0, 0.2) 0px 5px 15px;
         }
 
-        .icon ha-icon {
-          --mdc-icon-size: 32px;
-          filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
-        }
-
         .content {
           height: var(--height);
           width: 100%;
           z-index: 1;
           box-sizing: border-box;
-          padding: 3px 3px 3px 5px;
+          padding: 3px 3px 3px 8px;
+          overflow: false;
           background: var(--card-border-colour);
-          margin-left: -20px;
+          margin-left: -69px;
           flex: 1;
           position: relative;
           display: flex;
@@ -105,8 +103,7 @@ class CompactLightCard extends HTMLElement {
         }
 
         .brightness {
-          border-top-right-radius: 12px;
-          border-bottom-right-radius: 12px;
+          border-radius: 12px;
           width: 100%;
           height: 100%;
           transition: background 0.6s ease;
@@ -115,8 +112,7 @@ class CompactLightCard extends HTMLElement {
         .brightness-bar {
           height: 100%;
           background: var(--light-primary-colour);
-          border-top-right-radius: 12px;
-          border-bottom-right-radius: 12px;
+          border-radius: 12px;
           box-shadow: rgba(0, 0, 0, 0.1) 0px 5px 15px;
           transition: width 0.6s ease;
         }
@@ -126,15 +122,15 @@ class CompactLightCard extends HTMLElement {
           width: 100%;
           position: absolute;
           top: 0;
-          left: 5px;
           z-index: 2;
           display: flex;
           justify-content: space-between;
           align-items: center;
+          pointer-events: none;
         }
 
         .name {
-          padding-left: 30px;
+          padding-left: 79px;
           font-weight: bold;
           font-size: 18px;
           color: var(--primary-text-color);
@@ -152,11 +148,27 @@ class CompactLightCard extends HTMLElement {
         }
 
         .arrow {
-          padding-right: 15px;
+          padding-right: 10px;
           --mdc-icon-size: 28px;
           padding-top: 10px;
           padding-bottom: 10px;
           color: var(--primary-text-color);
+          pointer-events: auto;
+        }
+
+        .haicon {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: var(--icon-width);
+          height: var(--height);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--off-text-colour);
+          --mdc-icon-size: 32px;
+          filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
+          pointer-events: none;
         }
 
       </style>
@@ -165,19 +177,19 @@ class CompactLightCard extends HTMLElement {
         <div class="card">
           <div class="icon-wrapper">
             <div class="icon">
-              <ha-icon id="main-icon" icon="mdi:close"></ha-icon>
             </div>
           </div>
           <div class="content">
             <div class="brightness">
               <div class="brightness-bar"></div>
-              <div class="overlay">
-                <div class="name">Loading...</div>
-                <div class="right-info">
-                  <span class="percentage">—</span>
-                  <ha-icon class="arrow" icon="mdi:chevron-right"></ha-icon>
-                </div>
-              </div>
+            </div>
+          </div>
+          <div class="overlay">
+            <ha-icon id="main-icon" icon="mdi:close" class="haicon"></ha-icon>
+            <div class="name">Loading...</div>
+            <div class="right-info">
+              <span class="percentage">—</span>
+              <ha-icon class="arrow" icon="mdi:chevron-right"></ha-icon>
             </div>
           </div>
         </div>
@@ -202,7 +214,9 @@ class CompactLightCard extends HTMLElement {
       card_border_colour: config.card_border_colour,
       primary_colour: config.primary_colour,
       secondary_colour: config.secondary_colour,
-      chevron_action: config.chevron_action || { action: "hass-more-info" }
+      chevron_action: config.chevron_action || { action: "hass-more-info" },
+      opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 1,
+      blur: config.blur !== undefined ? Math.min(config.blur,10) : 0,
     };
 
     // validate off_colours structure
@@ -323,7 +337,7 @@ class CompactLightCard extends HTMLElement {
 
     // determine colour
     let primaryColour = "#ff890e";
-    let secondaryColour = "#eec59a";
+    let secondaryColour = "#866139ff";
 
     // use user's configured colours if provided
     if (this.config.primary_colour) {
@@ -766,7 +780,7 @@ class CompactLightCard extends HTMLElement {
       const rgbMatch = primaryColour.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
       if (rgbMatch) {
         const [r, g, b] = [rgbMatch[1], rgbMatch[2], rgbMatch[3]];
-        const glowColor = `rgba(${r}, ${g}, ${b}, 0.3)`; // 30% opacity
+        const glowColor = `rgba(${r}, ${g}, ${b}, ${Math.min(this.config.opacity * 0.6, 0.3)})`;
         cardContainer.style.boxShadow = `0 0 24px 8px ${glowColor}`;
       } else {
         // Fallback if match fails
@@ -776,9 +790,11 @@ class CompactLightCard extends HTMLElement {
       cardContainer.style.boxShadow = "none";
     }
     // icon colours
+    const haicon = root.querySelector(".haicon");
     if (percentageText === "Off" || percentageText === "Unavailable") {
       iconEl.style.background = "var(--off-background-colour)";
       iconEl.style.color = "var(--off-text-colour)";
+      haicon.style.color = "var(--off-text-colour)";
       brightnessEl.style.background = "var(--off-background-colour)";
 
       nameEl.style.color = "var(--off-text-colour)";
@@ -787,12 +803,22 @@ class CompactLightCard extends HTMLElement {
     } else {
       iconEl.style.background = "var(--light-secondary-colour)";
       iconEl.style.color = "var(--light-primary-colour)";
+      haicon.style.color = "var(--light-primary-colour)";
       brightnessEl.style.background = "var(--light-secondary-colour)";
 
       nameEl.style.color = "var(--primary-text-color)";
       percentageEl.style.color = "var(--primary-text-color)";
       root.querySelector(".arrow").style.color = "var(--primary-text-color)";
     }
+
+    // apply opacity
+    root.querySelector(".content").style.opacity = this.config.opacity;
+    root.querySelector(".icon").style.opacity = Math.max(Math.min(this.config.opacity * 1.5, 1), 0.3);
+    const shadowOpacity = 0.2 + (1 - this.config.opacity) * 0.4;
+    if (root.querySelector(".icon.no-border")) {
+      root.querySelector(".icon.no-border").style.boxShadow = `rgba(0, 0, 0, ${shadowOpacity}) 0px 5px 15px`;
+    }
+    root.querySelector(".card").style.backdropFilter = `blur(${this.config.blur}px)`;
   }
 
 }
