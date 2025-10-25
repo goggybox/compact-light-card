@@ -88,9 +88,9 @@ class CompactLightCard extends HTMLElement {
           width: 100%;
           z-index: 1;
           box-sizing: border-box;
-          padding: 3px 3px 3px 8px;
+          padding: 3px 6px 3px 8px;
           overflow: false;
-          background: var(--card-border-colour);
+          background: var(--icon-border-colour);
           margin-left: -69px;
           flex: 1;
           position: relative;
@@ -197,6 +197,79 @@ class CompactLightCard extends HTMLElement {
     `
   }
 
+  _hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : null;
+  }
+
+  _getLuminance(r, g, b) {
+    const [rs, gs, bs] = [r, g, b].map(c => {
+      c = c / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+  }
+
+  _getContrastRatio(colour1, colour2) {
+    const lum1 = this._getLuminance(colour1.r, colour1.g, colour1.b);
+    const lum2 = this._getLuminance(colour2.r, colour2.g, colour2.b);
+    const brightest = Math.max(lum1, lum2);
+    const darkest = Math.min(lum1, lum2);
+    return (brightest + 0.05) / (darkest + 0.05);
+  }
+
+  // convert any colour to RGB values
+  _parseColour(colour) {
+    // css var -> rgb
+    if (colour.startsWith('var(--')) {
+      // Get computed value of the CSS variable
+      const computedStyle = getComputedStyle(this);
+      const varName = colour.match(/var\((--[^)]+)\)/)[1];
+      colour = computedStyle.getPropertyValue(varName).trim() || '#000000';
+    }
+
+    // hex -> rgb
+    if (colour.startsWith('#')) {
+      return this._hexToRgb(colour);
+    }
+
+    // rgb and rgba
+    const rgbMatch = colour.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbMatch) {
+      return {
+        r: parseInt(rgbMatch[1]),
+        g: parseInt(rgbMatch[2]),
+        b: parseInt(rgbMatch[3])
+      };
+    }
+
+    // fallback
+    return { r: 0, g: 0, b: 0 };
+  }
+
+  // determine whether text colour should be white or black based on contrast with background
+  _getTextColourForBackground(backgroundColour) {
+    const bgRgb = this._parseColour(backgroundColour);
+    const white = { r: 255, g: 255, b: 255 };
+    const black = { r: 0, g: 0, b: 0 };
+
+    const contrastWithWhite = this._getContrastRatio(bgRgb, white);
+    const contrastWithBlack = this._getContrastRatio(bgRgb, black);
+
+    if (contrastWithWhite >= 1.3) {
+      return 'white';
+    } else if (contrastWithBlack >= 2.5) {
+      return 'black';
+    } else {
+      // Fallback: choose whichever has higher contrast
+      return contrastWithWhite > contrastWithBlack ? 'white' : 'black';
+    }
+  }
+
   setConfig(config) {
     if (!config.entity) {
       throw new Error("Compact Light Card: Please provide an 'entity' in the config.")
@@ -216,7 +289,8 @@ class CompactLightCard extends HTMLElement {
       secondary_colour: config.secondary_colour,
       chevron_action: config.chevron_action || { action: "hass-more-info" },
       opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 1,
-      blur: config.blur !== undefined ? Math.min(config.blur,10) : 0,
+      blur: config.blur !== undefined ? Math.min(config.blur, 10) : 0,
+      smart_font_colour: config.smart_font_colour !== false,
     };
 
     // validate off_colours structure
@@ -789,26 +863,60 @@ class CompactLightCard extends HTMLElement {
     } else {
       cardContainer.style.boxShadow = "none";
     }
-    // icon colours
+
+    // calculate optimal text colour based on background
+    const getTextColour = (backgroundColor) => {
+      const textColour = this._getTextColourForBackground(backgroundColor);
+      return textColour === 'white' ? '#ffffff' : '#7a7a7aff';
+    }
+
+    // apply colours with contrast consideration
     const haicon = root.querySelector(".haicon");
-    if (percentageText === "Off" || percentageText === "Unavailable") {
-      iconEl.style.background = "var(--off-background-colour)";
-      iconEl.style.color = "var(--off-text-colour)";
-      haicon.style.color = "var(--off-text-colour)";
-      brightnessEl.style.background = "var(--off-background-colour)";
+    if (this.config.smart_font_colour) {
+      if (percentageText === "Off" || percentageText === "Unavailable") {
+        const offBgColour = getComputedStyle(this).getPropertyValue('--off-background-colour').trim();
+        const optimalTextColour = getTextColour(offBgColour);
+        iconEl.style.background = "var(--off-background-colour)";
+        iconEl.style.color = optimalTextColour;
+        haicon.style.color = optimalTextColour;
+        brightnessEl.style.background = "var(--off-background-colour)";
 
-      nameEl.style.color = "var(--off-text-colour)";
-      percentageEl.style.color = "var(--off-text-colour)";
-      root.querySelector(".arrow").style.color = "var(--off-text-colour)";
-    } else {
-      iconEl.style.background = "var(--light-secondary-colour)";
-      iconEl.style.color = "var(--light-primary-colour)";
-      haicon.style.color = "var(--light-primary-colour)";
-      brightnessEl.style.background = "var(--light-secondary-colour)";
+        nameEl.style.color = optimalTextColour;
+        percentageEl.style.color = optimalTextColour;
+        root.querySelector(".arrow").style.color = optimalTextColour;
+      } else {
+        const lightPrimaryColour = primaryColour;
+        const optimalPrimaryTextColour = getTextColour(lightPrimaryColour);
+        iconEl.style.background = "var(--light-secondary-colour)";
+        iconEl.style.color = "var(--light-primary-colour)";
+        haicon.style.color = "var(--light-primary-colour)";
+        brightnessEl.style.background = "var(--light-secondary-colour)";
 
-      nameEl.style.color = "var(--primary-text-color)";
-      percentageEl.style.color = "var(--primary-text-color)";
-      root.querySelector(".arrow").style.color = "var(--primary-text-color)";
+        nameEl.style.color = optimalPrimaryTextColour;
+        percentageEl.style.color = optimalPrimaryTextColour;
+        root.querySelector(".arrow").style.color = optimalPrimaryTextColour;
+      }
+    }
+    else {
+      if (percentageText === "Off" || percentageText === "Unavailable") {
+        iconEl.style.background = "var(--off-background-colour)";
+        iconEl.style.color = "var(--off-text-colour)";
+        haicon.style.color = "var(--off-text-colour)";
+        brightnessEl.style.background = "var(--off-background-colour)";
+
+        nameEl.style.color = "var(--off-text-colour)";
+        percentageEl.style.color = "var(--off-text-colour)";
+        root.querySelector(".arrow").style.color = "var(--off-text-colour)";
+      } else {
+        iconEl.style.background = "var(--light-secondary-colour)";
+        iconEl.style.color = "var(--light-primary-colour)";
+        haicon.style.color = "var(--light-primary-colour)";
+        brightnessEl.style.background = "var(--light-secondary-colour)";
+
+        nameEl.style.color = "var(--primary-text-color)";
+        percentageEl.style.color = "var(--primary-text-color)";
+        root.querySelector(".arrow").style.color = "var(--primary-text-color)";
+      }
     }
 
     // apply opacity
