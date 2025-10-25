@@ -337,7 +337,7 @@ class CompactLightCard extends HTMLElement {
 
     // determine colour
     let primaryColour = "#ff890e";
-    let secondaryColour = "#866139ff";
+    let secondaryColour = "#eec59a";
 
     // use user's configured colours if provided
     if (this.config.primary_colour) {
