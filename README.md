@@ -5,6 +5,7 @@
 A clean, compact, and highly customisable light card for Home Assistant.
 
 ![Image 1](img/img1.png)
+![Image 4](img/img4.png)
 
 ## Features
 - Click and drag to increase/decrease the brightness of a dimmable bulb.
@@ -23,6 +24,8 @@ The following customisations are available:
 - `primary_colour: "#dbdbdb"` sets the card's primary colour to "#dbdbdb".
 - `secondary_colour: "#808080"` sets the card's secondary colour to "#808080". 
 - `glow: false` disables the glow around the card.
+- `opacity: 0.5` makes the card transparent. (`opacity` can take any value from `0.0-1.0`)
+- `blur: 3` gives the card a blurred, "frosted" effect. only visible if card is also transparent. (`blur` can take any value from `0.0-10.0`)
 - `icon_border: true` enables a border around the light icon, as can be seen in the "Salt Lamp" and "Mini Orb" cards in the above example.
 - `icon_border_colour: "#e0e0e0"` sets the icon border colour to "#e0e0e0".
 - `card_border: true` enables a border around the card, as can be seen in the "Mini Orb" card in the above example.
