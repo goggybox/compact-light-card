@@ -31,6 +31,7 @@ The following customisations are available:
 - `card_border: true` enables a border around the card, as can be seen in the "Mini Orb" card in the above example.
 - `card_border_colour: "#e0e0e0"` sets the card border colour to "#e0e0e0".
 - `off_colours:` customises the colour of the card background and text when the light is off.
+- `smart_font_colour: false` disables the smart font colour feature. (This feature determines whether the font is white or black depending on the contrast with the background)
   ```
   off_colours:
     background: "#e0e0e0"
