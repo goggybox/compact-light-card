@@ -5,6 +5,7 @@
 A clean, compact, and highly customisable light card for Home Assistant.
 
 ![Image 1](img/img1.png)
+
 ![Image 4](img/img4.png)
 
 ## Features
@@ -50,9 +51,11 @@ The following customisations are available:
   ```
   chevron_action:
     action: url
-    url_path: https://github.com/gogybox/compact-light-card/
+    url_path: https://github.com/goggybox/compact-light-card/
   ```
   The supported actions are `more-info`, `toggle`, `navigate`, `url`, and `perform-action`/`call-service`.
+- `chevron_double_tap_action:` customises the action performed when the chevron is double clicked, configured the same way as `chevron_action:`. By default, there is no action configured for a double tap. 
+- `chevron_hold_action:` customises the action performed when the chevron is held, configured the same way as `chevron_action:`. By default, there is no action configured for a hold.
 
 Examples of the customisations:
 
@@ -72,4 +75,4 @@ Alternatively:
 - Click download!
 
 ## License
-MIT © [goggybox](https://github.com/goggybox)
+GPLv3.0 © [goggybox](https://github.com/goggybox)

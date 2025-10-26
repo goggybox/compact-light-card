@@ -150,8 +150,8 @@ class CompactLightCard extends HTMLElement {
         .arrow {
           padding-right: 10px;
           --mdc-icon-size: 28px;
-          padding-top: 10px;
-          padding-bottom: 10px;
+          padding-top: 20px;
+          padding-bottom: 20px;
           color: var(--primary-text-color);
           pointer-events: auto;
         }
@@ -288,6 +288,8 @@ class CompactLightCard extends HTMLElement {
       primary_colour: config.primary_colour,
       secondary_colour: config.secondary_colour,
       chevron_action: config.chevron_action || { action: "hass-more-info" },
+      chevron_hold_action: config.chevron_hold_action,
+      chevron_double_tap_action: config.chevron_double_tap_action,
       opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 1,
       blur: config.blur !== undefined ? Math.min(config.blur, 10) : 0,
       smart_font_colour: config.smart_font_colour !== false,
@@ -609,25 +611,90 @@ class CompactLightCard extends HTMLElement {
       }
     });
 
-    // register arrow click
+    // register arrow interactions (click, double-tap, hold)
     const arrowEl = this.shadowRoot.querySelector(".arrow");
     if (arrowEl) {
       const newArrowEl = arrowEl.cloneNode(true);
-      arrowEl.replaceWith(newArrowEl)
+      arrowEl.replaceWith(newArrowEl);
 
-      // stop other elements from registering this event
-      newArrowEl.addEventListener("mousedown", (ev) => {
-        ev.stopPropagation();
-      });
-      newArrowEl.addEventListener("touchstart", (ev) => {
-        ev.stopPropagation();
-      });
+      let tapCount = 0;
+      let tapTimer = null;
+      let holdTimer = null;
+      let holdTriggered = false;
+      const HOLD_THRESHOLD = 500; // in ms
+      const DOUBLE_TAP_THRESHOLD = 300; // in ms
 
-      newArrowEl.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        this._performAction(this.config.chevron_action);
-      });
+      const handleSingleTap = () => {
+        if (tapCount === 1) {
+          this._performAction(this.config.chevron_action);
+        }
+        tapCount = 0;
+      };
 
+      const startHold = () => {
+        holdTriggered = false;
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          holdTriggered = true;
+          tapCount = 0;
+          this._performAction(this.config.chevron_hold_action);
+        }, HOLD_THRESHOLD);
+      };
+
+      const cancelHold = () => {
+        if (holdTimer) {
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+      };
+
+      const handleTap = () => {
+        cancelHold();
+        tapCount++;
+        if (tapCount === 1) {
+          tapTimer = setTimeout(handleSingleTap, DOUBLE_TAP_THRESHOLD);
+        } else if (tapCount === 2) {
+          clearTimeout(tapTimer);
+          tapTimer = null;
+          tapCount = 0;
+          this._performAction(this.config.chevron_double_tap_action);
+        }
+      };
+
+      // single touch handlers for both mouse and touch
+      const handlePointerDown = (ev) => {
+        ev.stopPropagation();
+        if (ev.type === "touchstart") {
+          ev.preventDefault();
+        }
+        startHold();
+      };
+      const handlePointerUp = (ev) => {
+        ev.stopPropagation();
+        if (holdTriggered) return;
+        if (holdTimer) {
+          cancelHold();
+          handleTap();
+        }
+      };
+      const handlePointerCancel = () => {
+        cancelHold();
+        tapCount = 0;
+        if (tapTimer) {
+          clearTimeout(tapTimer);
+          tapTimer = null;
+        }
+      };
+
+      // mouse handler
+      newArrowEl.addEventListener("mousedown", handlePointerDown);
+      newArrowEl.addEventListener("mouseup", handlePointerUp);
+      newArrowEl.addEventListener("mouseleave", handlePointerCancel);
+
+      // touch handler
+      newArrowEl.addEventListener("touchstart", handlePointerDown, { passive: false });
+      newArrowEl.addEventListener("touchend", handlePointerUp);
+      newArrowEl.addEventListener("touchcancel", handlePointerCancel);
     }
 
     // convert mouse/touch X to brightness %
