@@ -22,6 +22,8 @@ class CompactLightCard extends HTMLElement {
     this.pendingUpdate = null;
     this._hass = null;
     this._listenersInitialized = false;
+    this._iconListenerInitialized = false;
+    this._arrowListenerInitialized = false;
     this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -594,119 +596,118 @@ class CompactLightCard extends HTMLElement {
     const contentEl = this.shadowRoot.querySelector(".content");
     let currentBrightness = brightnessPercent;
 
-    // register icon click
-    const iconEl = this.shadowRoot.querySelector(".icon");
-    iconEl?.replaceWith(iconEl.cloneNode(true)); // remove existing listener
-    const newIconEl = this.shadowRoot.querySelector(".icon");
+    // register icon click - only once
+    if (!this._iconListenerInitialized) {
+      const iconEl = this.shadowRoot.querySelector(".icon");
+      iconEl.addEventListener("click", (ev) => {
+        ev.stopPropagation();
 
-    newIconEl.addEventListener("click", (ev) => {
-      ev.stopPropagation();
+        const entityId = this.config.entity;
+        const stateObj = this._hass.states[entityId];
+        if (!stateObj) return;
 
-      const entityId = this.config.entity;
-      const stateObj = hass.states[entityId];
-      if (!stateObj) return;
-
-      // toggle light
-      if (stateObj.state == "on") {
-        hass.callService("light", "turn_off", { entity_id: entityId });
-      } else {
-        // turn on - use configured brightness if icon_tap_to_brightness is enabled
-        if (this.config.icon_tap_to_brightness) {
-          const brightness255 = Math.round((this.config.turn_on_brightness / 100) * 255);
-          hass.callService("light", "turn_on", {
-            entity_id: entityId,
-            brightness: brightness255
-          });
+        // toggle light
+        if (stateObj.state == "on") {
+          this._hass.callService("light", "turn_off", { entity_id: entityId });
         } else {
-          hass.callService("light", "turn_on", { entity_id: entityId });
+          // turn on - use configured brightness if icon_tap_to_brightness is enabled
+          if (this.config.icon_tap_to_brightness) {
+            this._hass.callService("light", "turn_on", {
+              entity_id: entityId,
+              brightness_pct: this.config.turn_on_brightness
+            });
+          } else {
+            this._hass.callService("light", "turn_on", { entity_id: entityId });
+          }
         }
-      }
-    });
+      });
+      this._iconListenerInitialized = true;
+    }
 
-    // register arrow interactions (click, double-tap, hold)
-    const arrowEl = this.shadowRoot.querySelector(".arrow");
-    if (arrowEl) {
-      const newArrowEl = arrowEl.cloneNode(true);
-      arrowEl.replaceWith(newArrowEl);
+    // register arrow interactions (click, double-tap, hold) - only once
+    if (!this._arrowListenerInitialized) {
+      const arrowEl = this.shadowRoot.querySelector(".arrow");
+      if (arrowEl) {
+        let tapCount = 0;
+        let tapTimer = null;
+        let holdTimer = null;
+        let holdTriggered = false;
+        const HOLD_THRESHOLD = 500; // in ms
+        const DOUBLE_TAP_THRESHOLD = 300; // in ms
 
-      let tapCount = 0;
-      let tapTimer = null;
-      let holdTimer = null;
-      let holdTriggered = false;
-      const HOLD_THRESHOLD = 500; // in ms
-      const DOUBLE_TAP_THRESHOLD = 300; // in ms
-
-      const handleSingleTap = () => {
-        if (tapCount === 1) {
-          this._performAction(this.config.chevron_action);
-        }
-        tapCount = 0;
-      };
-
-      const startHold = () => {
-        holdTriggered = false;
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          holdTriggered = true;
+        const handleSingleTap = () => {
+          if (tapCount === 1) {
+            this._performAction(this.config.chevron_action);
+          }
           tapCount = 0;
-          this._performAction(this.config.chevron_hold_action);
-        }, HOLD_THRESHOLD);
-      };
+        };
 
-      const cancelHold = () => {
-        if (holdTimer) {
-          clearTimeout(holdTimer);
-          holdTimer = null;
-        }
-      };
+        const startHold = () => {
+          holdTriggered = false;
+          holdTimer = setTimeout(() => {
+            holdTimer = null;
+            holdTriggered = true;
+            tapCount = 0;
+            this._performAction(this.config.chevron_hold_action);
+          }, HOLD_THRESHOLD);
+        };
 
-      const handleTap = () => {
-        cancelHold();
-        tapCount++;
-        if (tapCount === 1) {
-          tapTimer = setTimeout(handleSingleTap, DOUBLE_TAP_THRESHOLD);
-        } else if (tapCount === 2) {
-          clearTimeout(tapTimer);
-          tapTimer = null;
-          tapCount = 0;
-          this._performAction(this.config.chevron_double_tap_action);
-        }
-      };
+        const cancelHold = () => {
+          if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+        };
 
-      // single touch handlers for both mouse and touch
-      const handlePointerDown = (ev) => {
-        ev.stopPropagation();
-        if (ev.type === "touchstart") {
-          ev.preventDefault();
-        }
-        startHold();
-      };
-      const handlePointerUp = (ev) => {
-        ev.stopPropagation();
-        if (holdTriggered) return;
-        if (holdTimer) {
+        const handleTap = () => {
           cancelHold();
-          handleTap();
-        }
-      };
-      const handlePointerCancel = () => {
-        cancelHold();
-        tapCount = 0;
-        if (tapTimer) {
-          clearTimeout(tapTimer);
-          tapTimer = null;
-        }
-      };
+          tapCount++;
+          if (tapCount === 1) {
+            tapTimer = setTimeout(handleSingleTap, DOUBLE_TAP_THRESHOLD);
+          } else if (tapCount === 2) {
+            clearTimeout(tapTimer);
+            tapTimer = null;
+            tapCount = 0;
+            this._performAction(this.config.chevron_double_tap_action);
+          }
+        };
 
-      // mouse handler
-      newArrowEl.addEventListener("mousedown", handlePointerDown);
-      newArrowEl.addEventListener("mouseup", handlePointerUp);
-      newArrowEl.addEventListener("mouseleave", handlePointerCancel);
+        // single touch handlers for both mouse and touch
+        const handlePointerDown = (ev) => {
+          ev.stopPropagation();
+          if (ev.type === "touchstart") {
+            ev.preventDefault();
+          }
+          startHold();
+        };
+        const handlePointerUp = (ev) => {
+          ev.stopPropagation();
+          if (holdTriggered) return;
+          if (holdTimer) {
+            cancelHold();
+            handleTap();
+          }
+        };
+        const handlePointerCancel = () => {
+          cancelHold();
+          tapCount = 0;
+          if (tapTimer) {
+            clearTimeout(tapTimer);
+            tapTimer = null;
+          }
+        };
 
-      // touch handler
-      newArrowEl.addEventListener("touchstart", handlePointerDown, { passive: false });
-      newArrowEl.addEventListener("touchend", handlePointerUp);
-      newArrowEl.addEventListener("touchcancel", handlePointerCancel);
+        // mouse handler
+        arrowEl.addEventListener("mousedown", handlePointerDown);
+        arrowEl.addEventListener("mouseup", handlePointerUp);
+        arrowEl.addEventListener("mouseleave", handlePointerCancel);
+
+        // touch handler
+        arrowEl.addEventListener("touchstart", handlePointerDown, { passive: false });
+        arrowEl.addEventListener("touchend", handlePointerUp);
+        arrowEl.addEventListener("touchcancel", handlePointerCancel);
+      }
+      this._arrowListenerInitialized = true;
     }
 
     // convert mouse/touch X to brightness %
