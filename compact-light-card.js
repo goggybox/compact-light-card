@@ -296,7 +296,7 @@ class CompactLightCard extends HTMLElement {
       opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 1,
       blur: config.blur !== undefined ? Math.min(config.blur, 10) : 0,
       smart_font_colour: config.smart_font_colour !== false,
-      icon_tap_to_brightness: config.icon_tap_to_brightness === true,
+      icon_tap_to_brightness: !!config.icon_tap_to_brightness,
       turn_on_brightness: config.turn_on_brightness !== undefined ? Math.max(1, Math.min(100, config.turn_on_brightness)) : 100,
     };
 
@@ -611,12 +611,15 @@ class CompactLightCard extends HTMLElement {
           this._hass.callService("light", "turn_off", { entity_id: entityId });
         } else {
           // turn on - use configured brightness if icon_tap_to_brightness is enabled
+          console.log("compact-light-card: icon_tap_to_brightness =", this.config.icon_tap_to_brightness, "turn_on_brightness =", this.config.turn_on_brightness);
           if (this.config.icon_tap_to_brightness) {
+            console.log("compact-light-card: Turning on with brightness_pct:", this.config.turn_on_brightness);
             this._hass.callService("light", "turn_on", {
               entity_id: entityId,
               brightness_pct: this.config.turn_on_brightness
             });
           } else {
+            console.log("compact-light-card: Turning on without brightness (feature disabled)");
             this._hass.callService("light", "turn_on", { entity_id: entityId });
           }
         }
