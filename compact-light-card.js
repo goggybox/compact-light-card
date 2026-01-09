@@ -21,6 +21,7 @@ class CompactLightCard extends HTMLElement {
     this.supportsBrightness = true;
     this.pendingUpdate = null;
     this._hass = null;
+    this._listenersInitialized = false;
     this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -610,7 +611,7 @@ class CompactLightCard extends HTMLElement {
         hass.callService("light", "turn_off", { entity_id: entityId });
       } else {
         // turn on - use configured brightness if icon_tap_to_brightness is enabled
-        if (this.config.icon_tap_to_brightness && this.supportsBrightness) {
+        if (this.config.icon_tap_to_brightness) {
           const brightness255 = Math.round((this.config.turn_on_brightness / 100) * 255);
           hass.callService("light", "turn_on", {
             entity_id: entityId,
@@ -813,47 +814,52 @@ class CompactLightCard extends HTMLElement {
       }
     };
 
-    // mouse held down
-    brightnessEl.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      onDragStart(e.clientX);
-    });
+    // Only add event listeners once to prevent lag from duplicate listeners
+    if (!this._listenersInitialized) {
+      // mouse held down
+      brightnessEl.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        onDragStart(e.clientX);
+      });
 
-    // mouse move
-    document.addEventListener("mousemove", (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      onDragMove(e.clientX);
-    });
+      // mouse move
+      document.addEventListener("mousemove", (e) => {
+        if (!this.isDragging) return;
+        e.preventDefault();
+        onDragMove(e.clientX);
+      });
 
-    // mouse up
-    document.addEventListener("mouseup", () => {
-      if (!this.isDragging) return;
-      onDragEnd();
-    });
+      // mouse up
+      document.addEventListener("mouseup", () => {
+        if (!this.isDragging) return;
+        onDragEnd();
+      });
 
-    // touch start
-    brightnessEl.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      onDragStart(touch.clientX);
-    });
+      // touch start
+      brightnessEl.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        onDragStart(touch.clientX);
+      });
 
-    // touch move
-    document.addEventListener("touchmove", (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      const touch = e.touches[0];
-      onDragMove(touch.clientX);
-    }, { passive: false });
+      // touch move
+      document.addEventListener("touchmove", (e) => {
+        if (!this.isDragging) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        onDragMove(touch.clientX);
+      }, { passive: false });
 
-    // touch end
-    document.addEventListener("touchend", (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      const touch = e.changedTouches[0];
-      onDragEnd();
-    });
+      // touch end
+      document.addEventListener("touchend", (e) => {
+        if (!this.isDragging) return;
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        onDragEnd();
+      });
+
+      this._listenersInitialized = true;
+    }
 
   }
 
