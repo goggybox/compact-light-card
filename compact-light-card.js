@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.26 loaded!");
+console.log("compact-light-card.js v0.6.27 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -138,9 +138,9 @@ class CompactLightCard extends HTMLElement {
         .brightness-bar {
           height: 100%;
           background: var(--light-primary-colour);
-          border-radius: 12px;
+          border-radius: 12px 0 0 12px;
           box-shadow: rgba(0, 0, 0, 0.1) 0px 5px 15px;
-          transition: width 0.6s ease;
+          transition: width 0.6s ease, border-radius 0.2s ease;
         }
 
         .overlay {
@@ -180,6 +180,8 @@ class CompactLightCard extends HTMLElement {
         .percentage {
           font-size: 14px;
           color: var(--primary-text-color);
+          min-width: 42px;
+          text-align: right;
         }
 
         .arrow {
@@ -1059,6 +1061,9 @@ class CompactLightCard extends HTMLElement {
         percentageEl.textContent = displayValue;
       }
     };
+
+    // Call _updateModeDisplay on every state update to show correct value
+    this._updateModeDisplay();
 
     // convert mouse/touch X to value based on current mode
     // Returns 0-100 for brightness/color_temp, 0-360 for hue
