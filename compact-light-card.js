@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.18 loaded!");
+console.log("compact-light-card.js v0.6.19 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -306,6 +306,7 @@ class CompactLightCard extends HTMLElement {
       turn_on_brightness: config.turn_on_brightness !== undefined ? Math.max(1, Math.min(100, config.turn_on_brightness)) : 100,
       height: config.height !== undefined ? Math.max(30, Math.min(150, config.height)) : 64,
       font_size: config.font_size !== undefined ? Math.max(8, Math.min(36, config.font_size)) : 18,
+      icon_background_colour: config.icon_background_colour || null,
     };
 
     // validate off_colours structure
@@ -971,24 +972,30 @@ class CompactLightCard extends HTMLElement {
 
     // apply colours with contrast consideration
     const haicon = root.querySelector(".haicon");
+
+    // determine icon background colour (custom or automatic)
+    const customIconBg = this.config.icon_background_colour;
+
     if (this.config.smart_font_colour) {
       if (percentageText === "Off" || percentageText === "Unavailable") {
         const offBgColour = getComputedStyle(this).getPropertyValue('--off-background-colour').trim();
-        const optimalTextColour = getTextColour(offBgColour);
-        iconEl.style.background = "var(--off-background-colour)";
+        const iconBgColour = customIconBg || offBgColour;
+        const optimalTextColour = getTextColour(iconBgColour);
+        iconEl.style.background = customIconBg || "var(--off-background-colour)";
         iconEl.style.color = optimalTextColour;
         haicon.style.color = optimalTextColour;
         brightnessEl.style.background = "var(--off-background-colour)";
 
-        nameEl.style.color = optimalTextColour;
-        percentageEl.style.color = optimalTextColour;
-        root.querySelector(".arrow").style.color = optimalTextColour;
+        nameEl.style.color = getTextColour(offBgColour);
+        percentageEl.style.color = getTextColour(offBgColour);
+        root.querySelector(".arrow").style.color = getTextColour(offBgColour);
       } else {
         const lightPrimaryColour = primaryColour;
         const optimalPrimaryTextColour = getTextColour(lightPrimaryColour);
-        iconEl.style.background = "var(--light-secondary-colour)";
-        iconEl.style.color = "var(--light-primary-colour)";
-        haicon.style.color = "var(--light-primary-colour)";
+        const iconBgForText = customIconBg || lightPrimaryColour;
+        iconEl.style.background = customIconBg || "var(--light-secondary-colour)";
+        iconEl.style.color = customIconBg ? getTextColour(customIconBg) : "var(--light-primary-colour)";
+        haicon.style.color = customIconBg ? getTextColour(customIconBg) : "var(--light-primary-colour)";
         brightnessEl.style.background = "var(--light-secondary-colour)";
 
         nameEl.style.color = optimalPrimaryTextColour;
@@ -998,7 +1005,7 @@ class CompactLightCard extends HTMLElement {
     }
     else {
       if (percentageText === "Off" || percentageText === "Unavailable") {
-        iconEl.style.background = "var(--off-background-colour)";
+        iconEl.style.background = customIconBg || "var(--off-background-colour)";
         iconEl.style.color = "var(--off-text-colour)";
         haicon.style.color = "var(--off-text-colour)";
         brightnessEl.style.background = "var(--off-background-colour)";
@@ -1007,7 +1014,7 @@ class CompactLightCard extends HTMLElement {
         percentageEl.style.color = "var(--off-text-colour)";
         root.querySelector(".arrow").style.color = "var(--off-text-colour)";
       } else {
-        iconEl.style.background = "var(--light-secondary-colour)";
+        iconEl.style.background = customIconBg || "var(--light-secondary-colour)";
         iconEl.style.color = "var(--light-primary-colour)";
         haicon.style.color = "var(--light-primary-colour)";
         brightnessEl.style.background = "var(--light-secondary-colour)";
@@ -1302,7 +1309,14 @@ class CompactLightCardEditor extends HTMLElement {
         </div>
 
         <div class="section">
-          <div class="section-title">Borders</div>
+          <div class="section-title">Icon & Card Borders</div>
+          <div class="row">
+            <label>Icon Background Colour</label>
+            <div class="input-container">
+              <input type="color" id="icon_background_colour_picker" value="${getColorValue(this._config.icon_background_colour)}">
+              <input type="text" id="icon_background_colour" value="${this._config.icon_background_colour || ""}" placeholder="Auto">
+            </div>
+          </div>
           <div class="row">
             <label>Icon Border</label>
             <input type="checkbox" id="icon_border" ${this._config.icon_border ? "checked" : ""}>
@@ -1469,6 +1483,7 @@ class CompactLightCardEditor extends HTMLElement {
       ["secondary_colour_picker", "secondary_colour"],
       ["off_background_picker", "off_background"],
       ["off_text_picker", "off_text"],
+      ["icon_background_colour_picker", "icon_background_colour"],
       ["icon_border_colour_picker", "icon_border_colour"],
       ["card_border_colour_picker", "card_border_colour"],
     ];
