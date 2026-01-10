@@ -32,6 +32,7 @@ class CompactLightCard extends HTMLElement {
           --icon-width: var(--height);
           --icon-border-radius: 15px;
           --icon-font-size: 36px;
+          --font-size: 18px;
 
           --off-background-colour: var(--secondary-background-color);
           --off-text-colour: var(--secondary-text-color);
@@ -135,7 +136,7 @@ class CompactLightCard extends HTMLElement {
         .name {
           padding-left: 79px;
           font-weight: bold;
-          font-size: 18px;
+          font-size: var(--font-size);
           color: var(--primary-text-color);
         }
 
@@ -298,6 +299,8 @@ class CompactLightCard extends HTMLElement {
       smart_font_colour: config.smart_font_colour !== false,
       icon_tap_to_brightness: !!config.icon_tap_to_brightness,
       turn_on_brightness: config.turn_on_brightness !== undefined ? Math.max(1, Math.min(100, config.turn_on_brightness)) : 100,
+      height: config.height !== undefined ? Math.max(30, Math.min(150, config.height)) : 64,
+      font_size: config.font_size !== undefined ? Math.max(8, Math.min(36, config.font_size)) : 18,
     };
 
     // validate off_colours structure
@@ -553,6 +556,10 @@ class CompactLightCard extends HTMLElement {
     const entity = this.config.entity;
     const stateObj = hass.states[entity];
     const state = stateObj.state;
+
+    // apply height and font size
+    this.style.setProperty("--height", `${this.config.height}px`);
+    this.style.setProperty("--font-size", `${this.config.font_size}px`);
 
     // get and apply off colours if configured
     const offColours = this._getOffColours();
