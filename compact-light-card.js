@@ -41,14 +41,13 @@ class CompactLightCard extends HTMLElement {
         }
 
         .card-container {
-          max-width: 500px;
+          width: 100%;
           height: var(--height);
           background: rgba(0,0,0,0.0);
           border-radius: var(--icon-border-radius);
-          margin: 0 auto;
-          margin-right: 5px;
-          margin-left: 5px;
+          margin: 0;
           overflow: hidden;
+          box-sizing: border-box;
         }
 
         .card {
