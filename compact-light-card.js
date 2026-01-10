@@ -57,6 +57,7 @@ class CompactLightCard extends HTMLElement {
           backdrop-filter: blur(0px);
           display: flex;
           align-items: center;
+          position: relative;
         }
 
         .icon-wrapper {
@@ -92,7 +93,7 @@ class CompactLightCard extends HTMLElement {
           z-index: 1;
           box-sizing: border-box;
           padding: 3px 6px 3px 8px;
-          overflow: false;
+          overflow: hidden;
           background: var(--icon-border-colour);
           margin-left: -69px;
           flex: 1;
