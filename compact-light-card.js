@@ -3,7 +3,8 @@
  *
  * A clean, compact, and highly customisable light card for Home Assistant.
  *
- * Author: goggybox
+ * Original Author: goggybox
+ * Modified by: lewisburgess
  * License: MIT
  */
 
