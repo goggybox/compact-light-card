@@ -109,6 +109,7 @@ For lights that support color temperature and/or RGB color, mode toggle buttons 
 
 - `show_color_temp_button: true/false` - Show/hide the color temperature button (default: `true` if light supports it)
 - `show_rgb_button: true/false` - Show/hide the RGB color button (default: `true` if light supports it)
+- `show_value_bar: true/false` - Show a solid color bar behind the buttons displaying the current value (default: `false`). When enabled, the button area shows the current color/temperature as a solid background with a visual delimiter.
 
 **Mode behavior:**
 - **Brightness mode** (sun icon): Slider controls brightness 1-100%

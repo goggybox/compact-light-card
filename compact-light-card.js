@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.25 loaded!");
+console.log("compact-light-card.js v0.6.26 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -168,7 +168,11 @@ class CompactLightCard extends HTMLElement {
           gap: 8px;
           height: 100%;
           padding: 0 8px 0 12px;
+        }
+
+        .right-info.value-bar {
           border-radius: 0 12px 12px 0;
+          border-left: 2px solid rgba(255, 255, 255, 0.3);
           background: var(--light-primary-colour, var(--secondary-background-color));
           transition: background 0.3s ease;
         }
@@ -385,6 +389,7 @@ class CompactLightCard extends HTMLElement {
       icon_background_colour: config.icon_background_colour || null,
       show_color_temp_button: config.show_color_temp_button !== false, // default true if supported
       show_rgb_button: config.show_rgb_button !== false, // default true if supported
+      show_value_bar: config.show_value_bar === true, // default false - solid background behind buttons
     };
 
     // validate off_colours structure
@@ -639,12 +644,16 @@ class CompactLightCard extends HTMLElement {
   getUsableWidth = () => {
     const buffer = 4;
     const contentEl = this.shadowRoot.querySelector(".content");
-    const rightInfoEl = this.shadowRoot.querySelector(".right-info");
     const contentStyle = getComputedStyle(contentEl);
     const paddingRight = parseFloat(contentStyle.paddingRight);
-    // Subtract the right-info width from the usable area
-    const rightInfoWidth = rightInfoEl ? rightInfoEl.offsetWidth : 0;
-    const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset - rightInfoWidth;
+    let contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
+
+    // Only subtract right-info width when show_value_bar is enabled
+    if (this.config && this.config.show_value_bar) {
+      const rightInfoEl = this.shadowRoot.querySelector(".right-info");
+      const rightInfoWidth = rightInfoEl ? rightInfoEl.offsetWidth : 0;
+      contentWidth -= rightInfoWidth;
+    }
     return contentWidth;
   };
 
@@ -932,6 +941,14 @@ class CompactLightCard extends HTMLElement {
       modeBrightnessBtn.classList.remove("hidden");
     }
 
+    // Apply value-bar class based on config
+    const rightInfoEl = this.shadowRoot.querySelector(".right-info");
+    if (this.config.show_value_bar) {
+      rightInfoEl.classList.add("value-bar");
+    } else {
+      rightInfoEl.classList.remove("value-bar");
+    }
+
     // Register mode button click handlers - only once
     if (!this._modeButtonsInitialized) {
       const setActiveMode = (mode) => {
@@ -1033,8 +1050,8 @@ class CompactLightCard extends HTMLElement {
           rightInfoBg = primaryColour;
       }
 
-      // Update right-info background
-      if (rightInfoEl && !this.isDragging) {
+      // Update right-info background (only when show_value_bar is enabled)
+      if (rightInfoEl && !this.isDragging && this.config.show_value_bar) {
         rightInfoEl.style.background = rightInfoBg;
       }
 
@@ -1110,8 +1127,8 @@ class CompactLightCard extends HTMLElement {
             rightInfoBg = null; // Don't change during brightness drag
         }
 
-        // Update right-info background during drag
-        if (rightInfoEl && rightInfoBg) {
+        // Update right-info background during drag (only when show_value_bar is enabled)
+        if (rightInfoEl && rightInfoBg && this.config.show_value_bar) {
           rightInfoEl.style.background = rightInfoBg;
         }
 
@@ -1321,30 +1338,26 @@ class CompactLightCard extends HTMLElement {
 
     // update name
     if (nameEl) nameEl.textContent = name;
-    // update displayed percentage
+    // update displayed percentage - only set if off/unavailable, otherwise _updateModeDisplay handles it
     if (!this.isDragging && percentageEl) {
       if (percentageText === "Off" || percentageText === "On" || percentageText === "Unavailable") {
         percentageEl.textContent = percentageText;
-      } else {
-        percentageEl.textContent = percentageText + "%";
       }
+      // When on, the value is set by _updateModeDisplay() based on current mode
     }
     // update icon
     if (haIconEl && icon) {
       haIconEl.setAttribute("icon", icon);
     }
-    // update bar width
+    // update bar width (only in brightness mode)
     // - the provided barWidth is a % from 0-100%, where 1% starts immediately right of the icon
-    if (!this.isDragging && barEl) {
+    if (!this.isDragging && barEl && this._currentMode === "brightness") {
       if (barWidth !== 0) {
-        const buffer = 4;
-        const contentStyle = getComputedStyle(contentEl);
-        const paddingRight = parseFloat(contentStyle.paddingRight);
-        const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
-        // Map 1-100% to 0-contentWidth for the bar portion beyond the icon
+        const usableWidth = this.getUsableWidth();
+        // Map 1-100% to 0-usableWidth for the bar portion beyond the icon
         const clampedWidth = Math.max(1, barWidth);
-        const effectiveWidth = ((clampedWidth - 1) / 99) * contentWidth;
-        const totalWidth = Math.min(effectiveWidth + window.left_offset, contentWidth + window.left_offset - 1);
+        const effectiveWidth = ((clampedWidth - 1) / 99) * usableWidth;
+        const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
         barEl.style.width = `${totalWidth}px`;
       } else {
         barEl.style.width = `0px`;
@@ -1454,9 +1467,9 @@ class CompactLightCard extends HTMLElement {
       }
     }
 
-    // Update right-info background based on state
+    // Update right-info background based on state (only when show_value_bar is enabled)
     const rightInfoEl = root.querySelector(".right-info");
-    if (rightInfoEl) {
+    if (rightInfoEl && this.config.show_value_bar) {
       if (percentageText === "Off" || percentageText === "Unavailable") {
         rightInfoEl.style.background = "var(--off-background-colour)";
       } else {
@@ -1486,6 +1499,11 @@ class CompactLightCard extends HTMLElement {
 
     root.querySelector(".content").style.opacity = cardOpacity;
     root.querySelector(".icon").style.opacity = iconOpacity;
+    // Right-info follows same opacity as content when show_value_bar is enabled
+    if (this.config.show_value_bar) {
+      const rightInfo = root.querySelector(".right-info");
+      if (rightInfo) rightInfo.style.opacity = cardOpacity;
+    }
 
     const shadowOpacity = 0.2 + (1 - cardOpacity) * 0.4;
     if (root.querySelector(".icon.no-border")) {
@@ -1894,6 +1912,10 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Show RGB/Color Button</label>
             <input type="checkbox" id="show_rgb_button" ${this._config.show_rgb_button !== false ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Show Value Bar</label>
+            <input type="checkbox" id="show_value_bar" ${this._config.show_value_bar ? "checked" : ""}>
           </div>
         </div>
 
