@@ -1058,6 +1058,16 @@ class CompactLightCardEditor extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._config = {};
+    this._hass = null;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    // Update entity picker if it exists
+    const entityPicker = this.shadowRoot?.querySelector("ha-entity-picker");
+    if (entityPicker) entityPicker.hass = hass;
+    const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
+    if (iconPicker) iconPicker.hass = hass;
   }
 
   setConfig(config) {
@@ -1065,14 +1075,36 @@ class CompactLightCardEditor extends HTMLElement {
     this.render();
   }
 
+  _hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : null;
+  }
+
+  _rgbToHex(r, g, b) {
+    return "#" + [r, g, b].map(x => {
+      const hex = parseInt(x).toString(16);
+      return hex.length === 1 ? "0" + hex : hex;
+    }).join("");
+  }
+
   render() {
     if (!this.shadowRoot) return;
+
+    // Helper to get colour value for color input (needs to be hex)
+    const getColorValue = (value) => {
+      if (!value) return "#ff890e";
+      if (value.startsWith("#")) return value;
+      if (value.startsWith("rgb")) {
+        const match = value.match(/(\d+),\s*(\d+),\s*(\d+)/);
+        if (match) return this._rgbToHex(match[1], match[2], match[3]);
+      }
+      return "#ff890e";
+    };
 
     this.shadowRoot.innerHTML = `
       <style>
         .editor {
           padding: 16px;
-          font-family: var(--paper-font-body1_-_font-family);
         }
         .section {
           margin-bottom: 24px;
@@ -1095,9 +1127,15 @@ class CompactLightCardEditor extends HTMLElement {
           gap: 12px;
         }
         .row label {
-          flex: 1;
+          min-width: 140px;
           font-size: 14px;
           color: var(--primary-text-color);
+        }
+        .row .input-container {
+          flex: 1;
+          display: flex;
+          gap: 8px;
+          align-items: center;
         }
         .row input[type="text"],
         .row input[type="number"] {
@@ -1107,6 +1145,15 @@ class CompactLightCardEditor extends HTMLElement {
           border-radius: 4px;
           background: var(--card-background-color, #fff);
           color: var(--primary-text-color);
+          font-size: 14px;
+        }
+        .row input[type="color"] {
+          width: 40px;
+          height: 36px;
+          padding: 2px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 4px;
+          cursor: pointer;
         }
         .row input[type="checkbox"] {
           width: 20px;
@@ -1119,14 +1166,21 @@ class CompactLightCardEditor extends HTMLElement {
           border-radius: 4px;
           background: var(--card-background-color, #fff);
           color: var(--primary-text-color);
+          font-size: 14px;
         }
-        .hint {
-          font-size: 11px;
+        ha-entity-picker, ha-icon-picker {
+          flex: 1;
+        }
+        .subsection {
+          margin-left: 16px;
+          padding-left: 16px;
+          border-left: 2px solid var(--divider-color, #e0e0e0);
+          margin-top: 8px;
+        }
+        .subsection-title {
+          font-size: 12px;
           color: var(--secondary-text-color);
-          margin-top: 2px;
-        }
-        ha-entity-picker {
-          width: 100%;
+          margin-bottom: 8px;
         }
       </style>
       <div class="editor">
@@ -1134,7 +1188,13 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="section-title">Basic Settings</div>
           <div class="row">
             <label>Entity *</label>
-            <input type="text" id="entity" value="${this._config.entity || ""}" placeholder="light.bedroom">
+            <ha-entity-picker
+              id="entity"
+              .hass=${this._hass}
+              .value=${this._config.entity || ""}
+              .includeDomains=${["light"]}
+              allow-custom-entity
+            ></ha-entity-picker>
           </div>
           <div class="row">
             <label>Name</label>
@@ -1142,7 +1202,11 @@ class CompactLightCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Icon</label>
-            <input type="text" id="icon" value="${this._config.icon || ""}" placeholder="mdi:lightbulb">
+            <ha-icon-picker
+              id="icon"
+              .hass=${this._hass}
+              .value=${this._config.icon || "mdi:lightbulb"}
+            ></ha-icon-picker>
           </div>
         </div>
 
@@ -1158,11 +1222,17 @@ class CompactLightCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Primary Colour</label>
-            <input type="text" id="primary_colour" value="${this._config.primary_colour || ""}" placeholder="#ff890e">
+            <div class="input-container">
+              <input type="color" id="primary_colour_picker" value="${getColorValue(this._config.primary_colour)}">
+              <input type="text" id="primary_colour" value="${this._config.primary_colour || ""}" placeholder="#ff890e">
+            </div>
           </div>
           <div class="row">
             <label>Secondary Colour</label>
-            <input type="text" id="secondary_colour" value="${this._config.secondary_colour || ""}" placeholder="#eec59a">
+            <div class="input-container">
+              <input type="color" id="secondary_colour_picker" value="${getColorValue(this._config.secondary_colour)}">
+              <input type="text" id="secondary_colour" value="${this._config.secondary_colour || ""}" placeholder="#eec59a">
+            </div>
           </div>
           <div class="row">
             <label>Glow Effect</label>
@@ -1175,6 +1245,24 @@ class CompactLightCardEditor extends HTMLElement {
         </div>
 
         <div class="section">
+          <div class="section-title">Off State Colours</div>
+          <div class="row">
+            <label>Background Colour</label>
+            <div class="input-container">
+              <input type="color" id="off_background_picker" value="${getColorValue(this._config.off_colours?.background)}">
+              <input type="text" id="off_background" value="${this._config.off_colours?.background || ""}" placeholder="#e0e0e0">
+            </div>
+          </div>
+          <div class="row">
+            <label>Text Colour</label>
+            <div class="input-container">
+              <input type="color" id="off_text_picker" value="${getColorValue(this._config.off_colours?.text)}">
+              <input type="text" id="off_text" value="${this._config.off_colours?.text || ""}" placeholder="#808080">
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
           <div class="section-title">Borders</div>
           <div class="row">
             <label>Icon Border</label>
@@ -1182,7 +1270,10 @@ class CompactLightCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Icon Border Colour</label>
-            <input type="text" id="icon_border_colour" value="${this._config.icon_border_colour || ""}" placeholder="#e0e0e0">
+            <div class="input-container">
+              <input type="color" id="icon_border_colour_picker" value="${getColorValue(this._config.icon_border_colour)}">
+              <input type="text" id="icon_border_colour" value="${this._config.icon_border_colour || ""}" placeholder="#e0e0e0">
+            </div>
           </div>
           <div class="row">
             <label>Card Border</label>
@@ -1190,7 +1281,10 @@ class CompactLightCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Card Border Colour</label>
-            <input type="text" id="card_border_colour" value="${this._config.card_border_colour || ""}" placeholder="#e0e0e0">
+            <div class="input-container">
+              <input type="color" id="card_border_colour_picker" value="${getColorValue(this._config.card_border_colour)}">
+              <input type="text" id="card_border_colour" value="${this._config.card_border_colour || ""}" placeholder="#e0e0e0">
+            </div>
           </div>
         </div>
 
@@ -1229,7 +1323,7 @@ class CompactLightCardEditor extends HTMLElement {
         <div class="section">
           <div class="section-title">Icon Tap Behaviour</div>
           <div class="row">
-            <label>Tap Icon for Specific Brightness</label>
+            <label>Tap Icon for Brightness</label>
             <input type="checkbox" id="icon_tap_to_brightness" ${this._config.icon_tap_to_brightness ? "checked" : ""}>
           </div>
           <div class="row">
@@ -1237,11 +1331,94 @@ class CompactLightCardEditor extends HTMLElement {
             <input type="number" id="turn_on_brightness" value="${this._config.turn_on_brightness || 100}" min="1" max="100">
           </div>
         </div>
+
+        <div class="section">
+          <div class="section-title">Chevron Actions</div>
+          <div class="row">
+            <label>Tap Action</label>
+            <select id="chevron_action">
+              <option value="more-info" ${(!this._config.chevron_action || this._config.chevron_action?.action === "more-info") ? "selected" : ""}>More Info</option>
+              <option value="toggle" ${this._config.chevron_action?.action === "toggle" ? "selected" : ""}>Toggle</option>
+              <option value="none" ${this._config.chevron_action?.action === "none" ? "selected" : ""}>None</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Hold Action</label>
+            <select id="chevron_hold_action">
+              <option value="" ${!this._config.chevron_hold_action ? "selected" : ""}>None</option>
+              <option value="more-info" ${this._config.chevron_hold_action?.action === "more-info" ? "selected" : ""}>More Info</option>
+              <option value="toggle" ${this._config.chevron_hold_action?.action === "toggle" ? "selected" : ""}>Toggle</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Double Tap Action</label>
+            <select id="chevron_double_tap_action">
+              <option value="" ${!this._config.chevron_double_tap_action ? "selected" : ""}>None</option>
+              <option value="more-info" ${this._config.chevron_double_tap_action?.action === "more-info" ? "selected" : ""}>More Info</option>
+              <option value="toggle" ${this._config.chevron_double_tap_action?.action === "toggle" ? "selected" : ""}>Toggle</option>
+            </select>
+          </div>
+        </div>
       </div>
     `;
 
+    // Setup HA pickers after render
+    this._setupHaPickers();
+
     // Add event listeners
-    this.shadowRoot.querySelectorAll("input, select").forEach((input) => {
+    this._setupEventListeners();
+  }
+
+  _setupHaPickers() {
+    // Entity picker
+    const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
+    if (entityPicker) {
+      entityPicker.hass = this._hass;
+      entityPicker.addEventListener("value-changed", (e) => {
+        this._config.entity = e.detail.value;
+        this._fireConfigChanged();
+      });
+    }
+
+    // Icon picker
+    const iconPicker = this.shadowRoot.querySelector("ha-icon-picker");
+    if (iconPicker) {
+      iconPicker.hass = this._hass;
+      iconPicker.addEventListener("value-changed", (e) => {
+        if (e.detail.value) {
+          this._config.icon = e.detail.value;
+        } else {
+          delete this._config.icon;
+        }
+        this._fireConfigChanged();
+      });
+    }
+  }
+
+  _setupEventListeners() {
+    // Color picker sync with text inputs
+    const colorPairs = [
+      ["primary_colour_picker", "primary_colour"],
+      ["secondary_colour_picker", "secondary_colour"],
+      ["off_background_picker", "off_background"],
+      ["off_text_picker", "off_text"],
+      ["icon_border_colour_picker", "icon_border_colour"],
+      ["card_border_colour_picker", "card_border_colour"],
+    ];
+
+    colorPairs.forEach(([pickerId, textId]) => {
+      const picker = this.shadowRoot.getElementById(pickerId);
+      const text = this.shadowRoot.getElementById(textId);
+      if (picker && text) {
+        picker.addEventListener("input", (e) => {
+          text.value = e.target.value;
+          this._handleColorChange(textId, e.target.value);
+        });
+      }
+    });
+
+    // Standard inputs
+    this.shadowRoot.querySelectorAll("input:not([type='color']), select").forEach((input) => {
       input.addEventListener("change", (e) => this._valueChanged(e));
       input.addEventListener("input", (e) => {
         if (e.target.type === "text" || e.target.type === "number") {
@@ -1249,6 +1426,30 @@ class CompactLightCardEditor extends HTMLElement {
         }
       });
     });
+  }
+
+  _handleColorChange(id, value) {
+    if (id === "off_background" || id === "off_text") {
+      const field = id === "off_background" ? "background" : "text";
+      if (!this._config.off_colours) {
+        this._config.off_colours = {};
+      }
+      if (value) {
+        this._config.off_colours[field] = value;
+      } else {
+        delete this._config.off_colours[field];
+        if (Object.keys(this._config.off_colours).length === 0) {
+          delete this._config.off_colours;
+        }
+      }
+    } else {
+      if (value) {
+        this._config[id] = value;
+      } else {
+        delete this._config[id];
+      }
+    }
+    this._fireConfigChanged();
   }
 
   _valueChanged(ev) {
@@ -1262,17 +1463,27 @@ class CompactLightCardEditor extends HTMLElement {
       value = target.checked;
     } else if (target.type === "number") {
       value = target.value === "" ? undefined : parseFloat(target.value);
+    } else if (target.tagName === "SELECT") {
+      value = target.value || undefined;
     } else {
       value = target.value || undefined;
     }
 
     // Handle special cases
     if (id === "glow" || id === "smart_font_colour") {
-      // These default to true, so only set if false
       if (value === true) {
         delete this._config[id];
       } else {
         this._config[id] = value;
+      }
+    } else if (id === "off_background" || id === "off_text") {
+      this._handleColorChange(id, value);
+      return;
+    } else if (id === "chevron_action" || id === "chevron_hold_action" || id === "chevron_double_tap_action") {
+      if (value && value !== "") {
+        this._config[id] = { action: value };
+      } else {
+        delete this._config[id];
       }
     } else if (value === undefined || value === "") {
       delete this._config[id];
@@ -1280,7 +1491,10 @@ class CompactLightCardEditor extends HTMLElement {
       this._config[id] = value;
     }
 
-    // Fire config changed event
+    this._fireConfigChanged();
+  }
+
+  _fireConfigChanged() {
     const event = new CustomEvent("config-changed", {
       detail: { config: this._config },
       bubbles: true,
