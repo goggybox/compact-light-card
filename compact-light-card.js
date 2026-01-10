@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.19 loaded!");
+console.log("compact-light-card.js v0.6.20 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1098,15 +1098,19 @@ class CompactLightCardEditor extends HTMLElement {
     if (!this.shadowRoot) return;
 
     // Helper to get colour value for color input (needs to be hex)
+    // Returns grey (#808080) when not set
     const getColorValue = (value) => {
-      if (!value) return "#ff890e";
+      if (!value) return "#808080";
       if (value.startsWith("#")) return value;
       if (value.startsWith("rgb")) {
         const match = value.match(/(\d+),\s*(\d+),\s*(\d+)/);
         if (match) return this._rgbToHex(match[1], match[2], match[3]);
       }
-      return "#ff890e";
+      return "#808080";
     };
+
+    // Helper to check if colour is set
+    const isColorSet = (value) => !!value;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -1153,6 +1157,24 @@ class CompactLightCardEditor extends HTMLElement {
           background: var(--card-background-color, #fff);
           color: var(--primary-text-color);
           font-size: 14px;
+        }
+        .color-picker-wrapper {
+          position: relative;
+          width: 40px;
+          height: 36px;
+          flex-shrink: 0;
+        }
+        .color-picker-wrapper.not-set::after {
+          content: "✕";
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: #d32f2f;
+          font-size: 18px;
+          font-weight: bold;
+          pointer-events: none;
+          text-shadow: 0 0 2px white;
         }
         .row input[type="color"] {
           width: 40px;
@@ -1269,15 +1291,19 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Primary Colour</label>
             <div class="input-container">
-              <input type="color" id="primary_colour_picker" value="${getColorValue(this._config.primary_colour)}">
-              <input type="text" id="primary_colour" value="${this._config.primary_colour || ""}" placeholder="#ff890e">
+              <div class="color-picker-wrapper ${isColorSet(this._config.primary_colour) ? '' : 'not-set'}">
+                <input type="color" id="primary_colour_picker" value="${getColorValue(this._config.primary_colour)}">
+              </div>
+              <input type="text" id="primary_colour" value="${this._config.primary_colour || ""}" placeholder="Auto">
             </div>
           </div>
           <div class="row">
             <label>Secondary Colour</label>
             <div class="input-container">
-              <input type="color" id="secondary_colour_picker" value="${getColorValue(this._config.secondary_colour)}">
-              <input type="text" id="secondary_colour" value="${this._config.secondary_colour || ""}" placeholder="#eec59a">
+              <div class="color-picker-wrapper ${isColorSet(this._config.secondary_colour) ? '' : 'not-set'}">
+                <input type="color" id="secondary_colour_picker" value="${getColorValue(this._config.secondary_colour)}">
+              </div>
+              <input type="text" id="secondary_colour" value="${this._config.secondary_colour || ""}" placeholder="Auto">
             </div>
           </div>
           <div class="row">
@@ -1295,15 +1321,19 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Background Colour</label>
             <div class="input-container">
-              <input type="color" id="off_background_picker" value="${getColorValue(this._config.off_colours?.background)}">
-              <input type="text" id="off_background" value="${this._config.off_colours?.background || ""}" placeholder="#e0e0e0">
+              <div class="color-picker-wrapper ${isColorSet(this._config.off_colours?.background) ? '' : 'not-set'}">
+                <input type="color" id="off_background_picker" value="${getColorValue(this._config.off_colours?.background)}">
+              </div>
+              <input type="text" id="off_background" value="${this._config.off_colours?.background || ""}" placeholder="Auto">
             </div>
           </div>
           <div class="row">
             <label>Text Colour</label>
             <div class="input-container">
-              <input type="color" id="off_text_picker" value="${getColorValue(this._config.off_colours?.text)}">
-              <input type="text" id="off_text" value="${this._config.off_colours?.text || ""}" placeholder="#808080">
+              <div class="color-picker-wrapper ${isColorSet(this._config.off_colours?.text) ? '' : 'not-set'}">
+                <input type="color" id="off_text_picker" value="${getColorValue(this._config.off_colours?.text)}">
+              </div>
+              <input type="text" id="off_text" value="${this._config.off_colours?.text || ""}" placeholder="Auto">
             </div>
           </div>
         </div>
@@ -1313,7 +1343,9 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Icon Background Colour</label>
             <div class="input-container">
-              <input type="color" id="icon_background_colour_picker" value="${getColorValue(this._config.icon_background_colour)}">
+              <div class="color-picker-wrapper ${isColorSet(this._config.icon_background_colour) ? '' : 'not-set'}">
+                <input type="color" id="icon_background_colour_picker" value="${getColorValue(this._config.icon_background_colour)}">
+              </div>
               <input type="text" id="icon_background_colour" value="${this._config.icon_background_colour || ""}" placeholder="Auto">
             </div>
           </div>
@@ -1324,8 +1356,10 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Icon Border Colour</label>
             <div class="input-container">
-              <input type="color" id="icon_border_colour_picker" value="${getColorValue(this._config.icon_border_colour)}">
-              <input type="text" id="icon_border_colour" value="${this._config.icon_border_colour || ""}" placeholder="#e0e0e0">
+              <div class="color-picker-wrapper ${isColorSet(this._config.icon_border_colour) ? '' : 'not-set'}">
+                <input type="color" id="icon_border_colour_picker" value="${getColorValue(this._config.icon_border_colour)}">
+              </div>
+              <input type="text" id="icon_border_colour" value="${this._config.icon_border_colour || ""}" placeholder="Auto">
             </div>
           </div>
           <div class="row">
@@ -1335,8 +1369,10 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Card Border Colour</label>
             <div class="input-container">
-              <input type="color" id="card_border_colour_picker" value="${getColorValue(this._config.card_border_colour)}">
-              <input type="text" id="card_border_colour" value="${this._config.card_border_colour || ""}" placeholder="#e0e0e0">
+              <div class="color-picker-wrapper ${isColorSet(this._config.card_border_colour) ? '' : 'not-set'}">
+                <input type="color" id="card_border_colour_picker" value="${getColorValue(this._config.card_border_colour)}">
+              </div>
+              <input type="text" id="card_border_colour" value="${this._config.card_border_colour || ""}" placeholder="Auto">
             </div>
           </div>
         </div>
@@ -1477,7 +1513,7 @@ class CompactLightCardEditor extends HTMLElement {
   }
 
   _setupEventListeners() {
-    // Color picker sync with text inputs
+    // Color picker and text input pairs
     const colorPairs = [
       ["primary_colour_picker", "primary_colour"],
       ["secondary_colour_picker", "secondary_colour"],
@@ -1488,13 +1524,49 @@ class CompactLightCardEditor extends HTMLElement {
       ["card_border_colour_picker", "card_border_colour"],
     ];
 
+    const colorTextIds = colorPairs.map(([_, textId]) => textId);
+
     colorPairs.forEach(([pickerId, textId]) => {
       const picker = this.shadowRoot.getElementById(pickerId);
       const text = this.shadowRoot.getElementById(textId);
+      const wrapper = picker?.parentElement;
+
       if (picker && text) {
+        // Color picker changes -> update text and save
         picker.addEventListener("input", (e) => {
           text.value = e.target.value;
+          // Update wrapper to remove not-set indicator
+          if (wrapper) wrapper.classList.remove("not-set");
+        });
+        picker.addEventListener("change", (e) => {
+          text.value = e.target.value;
+          if (wrapper) wrapper.classList.remove("not-set");
           this._handleColorChange(textId, e.target.value);
+        });
+
+        // Text input changes -> update picker visually on input, save on change
+        text.addEventListener("input", (e) => {
+          const val = e.target.value;
+          // Update picker if it's a valid hex color
+          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+            picker.value = val;
+            if (wrapper) wrapper.classList.remove("not-set");
+          } else if (val === "") {
+            picker.value = "#808080";
+            if (wrapper) wrapper.classList.add("not-set");
+          }
+          // Don't fire config change here - wait for blur/enter
+        });
+        text.addEventListener("change", (e) => {
+          const val = e.target.value;
+          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+            picker.value = val;
+            if (wrapper) wrapper.classList.remove("not-set");
+          } else if (val === "") {
+            picker.value = "#808080";
+            if (wrapper) wrapper.classList.add("not-set");
+          }
+          this._handleColorChange(textId, val || undefined);
         });
       }
     });
@@ -1520,13 +1592,14 @@ class CompactLightCardEditor extends HTMLElement {
           this._handleOpacityChange(fieldId, val);
         });
 
-        // Number input changes -> update slider and preview
+        // Number input changes -> update slider and preview visually, save on change only
         numberInput.addEventListener("input", (e) => {
           const val = e.target.value === "" ? null : parseFloat(e.target.value);
           if (val !== null && !isNaN(val)) {
             slider.value = val;
             if (preview) preview.style.opacity = val;
           }
+          // Don't fire config change here - wait for blur/enter
         });
         numberInput.addEventListener("change", (e) => {
           const val = e.target.value === "" ? null : parseFloat(e.target.value);
@@ -1539,17 +1612,13 @@ class CompactLightCardEditor extends HTMLElement {
       }
     });
 
-    // Standard inputs (excluding opacity sliders which are handled above)
+    // Standard inputs - only fire on change (blur/enter), NOT on input
     this.shadowRoot.querySelectorAll("input:not([type='color']):not([type='range']), select").forEach((input) => {
-      // Skip opacity number inputs as they're handled above
-      if (opacityFields.includes(input.id)) return;
+      // Skip inputs handled above
+      if (opacityFields.includes(input.id) || colorTextIds.includes(input.id)) return;
 
+      // Only fire on change event (blur or enter), not on every keystroke
       input.addEventListener("change", (e) => this._valueChanged(e));
-      input.addEventListener("input", (e) => {
-        if (e.target.type === "text" || e.target.type === "number") {
-          this._valueChanged(e);
-        }
-      });
     });
   }
 
