@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.12 loaded!");
+console.log("compact-light-card.js v0.6.18 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1171,6 +1171,45 @@ class CompactLightCardEditor extends HTMLElement {
         ha-entity-picker, ha-icon-picker {
           flex: 1;
         }
+        .opacity-control {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .opacity-control input[type="range"] {
+          flex: 1;
+          height: 6px;
+          -webkit-appearance: none;
+          appearance: none;
+          background: linear-gradient(to right, transparent, var(--primary-color, #03a9f4));
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        .opacity-control input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          background: var(--primary-color, #03a9f4);
+          border-radius: 50%;
+          cursor: pointer;
+        }
+        .opacity-control input[type="number"] {
+          width: 55px;
+          flex: none;
+          padding: 6px;
+          text-align: center;
+          font-size: 13px;
+        }
+        .opacity-preview {
+          width: 32px;
+          height: 32px;
+          border-radius: 4px;
+          background: linear-gradient(135deg, var(--primary-color, #03a9f4) 50%, var(--secondary-background-color, #e0e0e0) 50%);
+          border: 1px solid var(--divider-color, #ccc);
+          flex-shrink: 0;
+        }
         .subsection {
           margin-left: 16px;
           padding-left: 16px;
@@ -1289,30 +1328,54 @@ class CompactLightCardEditor extends HTMLElement {
         </div>
 
         <div class="section">
-          <div class="section-title">Opacity (0.0 - 1.0)</div>
-          <div class="row">
+          <div class="section-title">Opacity & Blur</div>
+          <div class="row opacity-row">
             <label>Default Opacity</label>
-            <input type="number" id="opacity" value="${this._config.opacity !== undefined ? this._config.opacity : 1}" min="0" max="1" step="0.1">
+            <div class="opacity-control">
+              <input type="range" id="opacity_slider" value="${this._config.opacity !== undefined ? this._config.opacity : 1}" min="0" max="1" step="0.05">
+              <input type="number" id="opacity" value="${this._config.opacity !== undefined ? this._config.opacity : 1}" min="0" max="1" step="0.05">
+              <div class="opacity-preview" id="opacity_preview" style="opacity: ${this._config.opacity !== undefined ? this._config.opacity : 1}"></div>
+            </div>
           </div>
-          <div class="row">
+          <div class="row opacity-row">
             <label>Opacity When On</label>
-            <input type="number" id="opacity_on" value="${this._config.opacity_on || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+            <div class="opacity-control">
+              <input type="range" id="opacity_on_slider" value="${this._config.opacity_on || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="opacity_on" value="${this._config.opacity_on || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="opacity_on_preview" style="opacity: ${this._config.opacity_on || 1}"></div>
+            </div>
           </div>
-          <div class="row">
+          <div class="row opacity-row">
             <label>Opacity When Off</label>
-            <input type="number" id="opacity_off" value="${this._config.opacity_off || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+            <div class="opacity-control">
+              <input type="range" id="opacity_off_slider" value="${this._config.opacity_off || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="opacity_off" value="${this._config.opacity_off || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="opacity_off_preview" style="opacity: ${this._config.opacity_off || 1}"></div>
+            </div>
           </div>
-          <div class="row">
+          <div class="row opacity-row">
             <label>Icon Opacity</label>
-            <input type="number" id="icon_opacity" value="${this._config.icon_opacity || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+            <div class="opacity-control">
+              <input type="range" id="icon_opacity_slider" value="${this._config.icon_opacity || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="icon_opacity" value="${this._config.icon_opacity || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="icon_opacity_preview" style="opacity: ${this._config.icon_opacity || 1}"></div>
+            </div>
           </div>
-          <div class="row">
+          <div class="row opacity-row">
             <label>Icon Opacity When On</label>
-            <input type="number" id="icon_opacity_on" value="${this._config.icon_opacity_on || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+            <div class="opacity-control">
+              <input type="range" id="icon_opacity_on_slider" value="${this._config.icon_opacity_on || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="icon_opacity_on" value="${this._config.icon_opacity_on || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="icon_opacity_on_preview" style="opacity: ${this._config.icon_opacity_on || 1}"></div>
+            </div>
           </div>
-          <div class="row">
+          <div class="row opacity-row">
             <label>Icon Opacity When Off</label>
-            <input type="number" id="icon_opacity_off" value="${this._config.icon_opacity_off || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+            <div class="opacity-control">
+              <input type="range" id="icon_opacity_off_slider" value="${this._config.icon_opacity_off || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="icon_opacity_off" value="${this._config.icon_opacity_off || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="icon_opacity_off_preview" style="opacity: ${this._config.icon_opacity_off || 1}"></div>
+            </div>
           </div>
           <div class="row">
             <label>Blur</label>
@@ -1323,7 +1386,7 @@ class CompactLightCardEditor extends HTMLElement {
         <div class="section">
           <div class="section-title">Icon Tap Behaviour</div>
           <div class="row">
-            <label>Tap Icon for Brightness</label>
+            <label>Tap icon for specific brightness</label>
             <input type="checkbox" id="icon_tap_to_brightness" ${this._config.icon_tap_to_brightness ? "checked" : ""}>
           </div>
           <div class="row">
@@ -1370,20 +1433,24 @@ class CompactLightCardEditor extends HTMLElement {
   }
 
   _setupHaPickers() {
-    // Entity picker
+    // Entity picker - set value property directly after render
     const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
     if (entityPicker) {
       entityPicker.hass = this._hass;
+      entityPicker.value = this._config.entity || "";
+      entityPicker.includeDomains = ["light"];
+      entityPicker.allowCustomEntity = true;
       entityPicker.addEventListener("value-changed", (e) => {
         this._config.entity = e.detail.value;
         this._fireConfigChanged();
       });
     }
 
-    // Icon picker
+    // Icon picker - set value property directly after render
     const iconPicker = this.shadowRoot.querySelector("ha-icon-picker");
     if (iconPicker) {
       iconPicker.hass = this._hass;
+      iconPicker.value = this._config.icon || "mdi:lightbulb";
       iconPicker.addEventListener("value-changed", (e) => {
         if (e.detail.value) {
           this._config.icon = e.detail.value;
@@ -1417,8 +1484,51 @@ class CompactLightCardEditor extends HTMLElement {
       }
     });
 
-    // Standard inputs
-    this.shadowRoot.querySelectorAll("input:not([type='color']), select").forEach((input) => {
+    // Opacity slider sync with number inputs and preview
+    const opacityFields = ["opacity", "opacity_on", "opacity_off", "icon_opacity", "icon_opacity_on", "icon_opacity_off"];
+    opacityFields.forEach((fieldId) => {
+      const slider = this.shadowRoot.getElementById(`${fieldId}_slider`);
+      const numberInput = this.shadowRoot.getElementById(fieldId);
+      const preview = this.shadowRoot.getElementById(`${fieldId}_preview`);
+
+      if (slider && numberInput) {
+        // Slider changes -> update number input and preview
+        slider.addEventListener("input", (e) => {
+          const val = parseFloat(e.target.value);
+          numberInput.value = val;
+          if (preview) preview.style.opacity = val;
+        });
+        slider.addEventListener("change", (e) => {
+          const val = parseFloat(e.target.value);
+          numberInput.value = val;
+          if (preview) preview.style.opacity = val;
+          this._handleOpacityChange(fieldId, val);
+        });
+
+        // Number input changes -> update slider and preview
+        numberInput.addEventListener("input", (e) => {
+          const val = e.target.value === "" ? null : parseFloat(e.target.value);
+          if (val !== null && !isNaN(val)) {
+            slider.value = val;
+            if (preview) preview.style.opacity = val;
+          }
+        });
+        numberInput.addEventListener("change", (e) => {
+          const val = e.target.value === "" ? null : parseFloat(e.target.value);
+          if (val !== null && !isNaN(val)) {
+            slider.value = val;
+            if (preview) preview.style.opacity = val;
+          }
+          this._handleOpacityChange(fieldId, val);
+        });
+      }
+    });
+
+    // Standard inputs (excluding opacity sliders which are handled above)
+    this.shadowRoot.querySelectorAll("input:not([type='color']):not([type='range']), select").forEach((input) => {
+      // Skip opacity number inputs as they're handled above
+      if (opacityFields.includes(input.id)) return;
+
       input.addEventListener("change", (e) => this._valueChanged(e));
       input.addEventListener("input", (e) => {
         if (e.target.type === "text" || e.target.type === "number") {
@@ -1426,6 +1536,15 @@ class CompactLightCardEditor extends HTMLElement {
         }
       });
     });
+  }
+
+  _handleOpacityChange(fieldId, value) {
+    if (value === null || value === undefined) {
+      delete this._config[fieldId];
+    } else {
+      this._config[fieldId] = value;
+    }
+    this._fireConfigChanged();
   }
 
   _handleColorChange(id, value) {
