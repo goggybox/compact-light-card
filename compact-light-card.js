@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.23 loaded!");
+console.log("compact-light-card.js v0.6.24 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1346,7 +1346,9 @@ class CompactLightCard extends HTMLElement {
         iconEl.style.background = customIconBg || "var(--off-background-colour)";
         iconEl.style.color = optimalTextColour;
         haicon.style.color = optimalTextColour;
-        brightnessEl.style.background = "var(--off-background-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--off-background-colour)";
+        }
 
         nameEl.style.color = getTextColour(offBgColour);
         percentageEl.style.color = getTextColour(offBgColour);
@@ -1358,7 +1360,9 @@ class CompactLightCard extends HTMLElement {
         iconEl.style.background = customIconBg || "var(--light-secondary-colour)";
         iconEl.style.color = customIconBg ? getTextColour(customIconBg) : "var(--light-primary-colour)";
         haicon.style.color = customIconBg ? getTextColour(customIconBg) : "var(--light-primary-colour)";
-        brightnessEl.style.background = "var(--light-secondary-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--light-secondary-colour)";
+        }
 
         nameEl.style.color = optimalPrimaryTextColour;
         percentageEl.style.color = optimalPrimaryTextColour;
@@ -1370,7 +1374,9 @@ class CompactLightCard extends HTMLElement {
         iconEl.style.background = customIconBg || "var(--off-background-colour)";
         iconEl.style.color = "var(--off-text-colour)";
         haicon.style.color = "var(--off-text-colour)";
-        brightnessEl.style.background = "var(--off-background-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--off-background-colour)";
+        }
 
         nameEl.style.color = "var(--off-text-colour)";
         percentageEl.style.color = "var(--off-text-colour)";
@@ -1379,7 +1385,9 @@ class CompactLightCard extends HTMLElement {
         iconEl.style.background = customIconBg || "var(--light-secondary-colour)";
         iconEl.style.color = "var(--light-primary-colour)";
         haicon.style.color = "var(--light-primary-colour)";
-        brightnessEl.style.background = "var(--light-secondary-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--light-secondary-colour)";
+        }
 
         nameEl.style.color = "var(--primary-text-color)";
         percentageEl.style.color = "var(--primary-text-color)";
