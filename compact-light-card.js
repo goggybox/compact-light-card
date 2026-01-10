@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.27 loaded!");
+console.log("compact-light-card.js v0.6.28 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1777,6 +1777,10 @@ class CompactLightCardEditor extends HTMLElement {
             <label>Smart Font Colour</label>
             <input type="checkbox" id="smart_font_colour" ${this._config.smart_font_colour !== false ? "checked" : ""}>
           </div>
+          <div class="row">
+            <label>Show Value Bar</label>
+            <input type="checkbox" id="show_value_bar" ${this._config.show_value_bar ? "checked" : ""}>
+          </div>
         </div>
 
         <div class="section">
@@ -1917,10 +1921,6 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Show RGB/Color Button</label>
             <input type="checkbox" id="show_rgb_button" ${this._config.show_rgb_button !== false ? "checked" : ""}>
-          </div>
-          <div class="row">
-            <label>Show Value Bar</label>
-            <input type="checkbox" id="show_value_bar" ${this._config.show_value_bar ? "checked" : ""}>
           </div>
         </div>
 
