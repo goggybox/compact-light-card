@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.22 loaded!");
+console.log("compact-light-card.js v0.6.23 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -115,6 +115,24 @@ class CompactLightCard extends HTMLElement {
           width: 100%;
           height: 100%;
           transition: background 0.6s ease;
+          position: relative;
+        }
+
+        .color-marker {
+          position: absolute;
+          top: 0;
+          width: 4px;
+          height: 100%;
+          background: white;
+          border-radius: 2px;
+          box-shadow: 0 0 4px rgba(0,0,0,0.5);
+          pointer-events: none;
+          display: none;
+          z-index: 1;
+        }
+
+        .color-marker.visible {
+          display: block;
         }
 
         .brightness-bar {
@@ -193,6 +211,23 @@ class CompactLightCard extends HTMLElement {
           display: none;
         }
 
+        .color-marker {
+          position: absolute;
+          top: 0;
+          width: 4px;
+          height: 100%;
+          background: white;
+          border-radius: 2px;
+          box-shadow: 0 0 4px rgba(0,0,0,0.5);
+          pointer-events: none;
+          display: none;
+          z-index: 1;
+        }
+
+        .color-marker.visible {
+          display: block;
+        }
+
         .haicon {
           position: absolute;
           left: 0;
@@ -219,6 +254,7 @@ class CompactLightCard extends HTMLElement {
           <div class="content">
             <div class="brightness">
               <div class="brightness-bar"></div>
+              <div class="color-marker"></div>
             </div>
           </div>
           <div class="overlay">
@@ -872,14 +908,27 @@ class CompactLightCard extends HTMLElement {
         modeColorTempBtn.classList.toggle("active", mode === "color_temp");
         modeRgbBtn.classList.toggle("active", mode === "rgb");
 
-        // Update bar color based on mode
+        // Update bar and marker based on mode
         const barEl = this.shadowRoot.querySelector(".brightness-bar");
+        const markerEl = this.shadowRoot.querySelector(".color-marker");
+        const brightnessEl = this.shadowRoot.querySelector(".brightness");
+
         if (mode === "color_temp") {
-          barEl.style.background = "linear-gradient(to right, #ffa500, #87ceeb)";
+          // Show full gradient background, hide bar fill, show marker
+          brightnessEl.style.background = "linear-gradient(to right, #ff8c00, #ffd700, #fffaf0, #e0ffff, #87ceeb)";
+          barEl.style.display = "none";
+          markerEl.classList.add("visible");
         } else if (mode === "rgb") {
-          barEl.style.background = "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)";
+          // Show full rainbow gradient, hide bar fill, show marker
+          brightnessEl.style.background = "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)";
+          barEl.style.display = "none";
+          markerEl.classList.add("visible");
         } else {
+          // Brightness mode: restore normal bar behavior
+          brightnessEl.style.background = "";
+          barEl.style.display = "";
           barEl.style.background = "var(--light-primary-colour)";
+          markerEl.classList.remove("visible");
         }
 
         // Update display for current mode
@@ -904,27 +953,43 @@ class CompactLightCard extends HTMLElement {
 
     // Update mode display when state changes
     this._updateModeDisplay = () => {
-      const { brightnessPercent, colorTempPercent, hue } = this._getCardState();
+      const { brightnessPercent, colorTempPercent, colorTemp, hue } = this._getCardState();
       const percentageEl = this.shadowRoot.querySelector(".percentage");
-      const barEl = this.shadowRoot.querySelector(".brightness-bar");
+      const markerEl = this.shadowRoot.querySelector(".color-marker");
       const stateObj = this._hass.states[this.config.entity];
 
       if (!stateObj || stateObj.state !== "on") return;
 
-      let displayValue, barPercent;
+      let displayValue;
+      const usableWidth = this.getUsableWidth();
 
       switch (this._currentMode) {
         case "color_temp":
-          displayValue = colorTempPercent !== null ? `${colorTempPercent}%` : "—";
-          barPercent = colorTempPercent || 50;
+          if (colorTemp !== null) {
+            // Convert mireds to Kelvin
+            const kelvin = Math.round(1000000 / colorTemp);
+            displayValue = `${kelvin}K`;
+            // Position marker based on color temp percentage
+            const tempPercent = colorTempPercent / 100;
+            const markerPosTemp = window.left_offset + tempPercent * usableWidth;
+            if (!this.isDragging) markerEl.style.left = `${markerPosTemp}px`;
+          } else {
+            displayValue = "—";
+          }
           break;
         case "rgb":
-          displayValue = hue !== null ? `${hue}°` : "—";
-          barPercent = hue !== null ? (hue / 360) * 100 : 50;
+          if (hue !== null) {
+            displayValue = `${hue}°`;
+            // Position marker based on hue
+            const huePercent = hue / 360;
+            const markerPosRgb = window.left_offset + huePercent * usableWidth;
+            if (!this.isDragging) markerEl.style.left = `${markerPosRgb}px`;
+          } else {
+            displayValue = "—";
+          }
           break;
         default: // brightness
           displayValue = `${brightnessPercent}%`;
-          barPercent = brightnessPercent;
       }
 
       if (!this.isDragging && percentageEl) {
@@ -954,7 +1019,7 @@ class CompactLightCard extends HTMLElement {
     // Legacy alias for brightness mode
     const getBrightnessFromX = getValueFromX;
 
-    // update the width of the bar and display text (without applying to light)
+    // update the bar/marker and display text (without applying to light)
     const updateBarPreview = (value) => {
       if (this.pendingUpdate) {
         cancelAnimationFrame(this.pendingUpdate);
@@ -962,25 +1027,35 @@ class CompactLightCard extends HTMLElement {
 
       this.pendingUpdate = requestAnimationFrame(() => {
         const usableWidth = this.getUsableWidth();
+        const markerEl = this.shadowRoot.querySelector(".color-marker");
         let percent, displayText;
 
         switch (this._currentMode) {
           case "color_temp":
             percent = value / 100;
-            displayText = `${Math.round(value)}%`;
+            // Convert to Kelvin approximation (typical range 2700K-6500K)
+            const kelvin = Math.round(2700 + (value / 100) * (6500 - 2700));
+            displayText = `${kelvin}K`;
+            // Position the marker
+            const markerPosTemp = window.left_offset + percent * usableWidth;
+            markerEl.style.left = `${markerPosTemp}px`;
             break;
           case "rgb":
             percent = value / 360;
             displayText = `${Math.round(value)}°`;
+            // Position the marker
+            const markerPosRgb = window.left_offset + percent * usableWidth;
+            markerEl.style.left = `${markerPosRgb}px`;
             break;
           default: // brightness
             percent = (value - 1) / 99;
             displayText = `${Math.round(value)}%`;
+            // Use bar width for brightness
+            const effectiveWidth = percent * usableWidth;
+            const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
+            barEl.style.width = `${totalWidth}px`;
         }
 
-        const effectiveWidth = percent * usableWidth;
-        const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
-        barEl.style.width = `${totalWidth}px`;
         if (percentageEl) percentageEl.textContent = displayText;
         this.pendingUpdate = null;
       });
