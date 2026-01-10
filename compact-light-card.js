@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.20 loaded!");
+console.log("compact-light-card.js v0.6.21 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
