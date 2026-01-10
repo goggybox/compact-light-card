@@ -294,7 +294,12 @@ class CompactLightCard extends HTMLElement {
       chevron_action: config.chevron_action || { action: "hass-more-info" },
       chevron_hold_action: config.chevron_hold_action,
       chevron_double_tap_action: config.chevron_double_tap_action,
-      opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 1,
+      opacity: config.opacity !== undefined ? Math.max(config.opacity, 0) : 1,
+      opacity_on: config.opacity_on !== undefined ? Math.max(config.opacity_on, 0) : null,
+      opacity_off: config.opacity_off !== undefined ? Math.max(config.opacity_off, 0) : null,
+      icon_opacity: config.icon_opacity !== undefined ? Math.max(config.icon_opacity, 0) : null,
+      icon_opacity_on: config.icon_opacity_on !== undefined ? Math.max(config.icon_opacity_on, 0) : null,
+      icon_opacity_off: config.icon_opacity_off !== undefined ? Math.max(config.icon_opacity_off, 0) : null,
       blur: config.blur !== undefined ? Math.min(config.blur, 10) : 0,
       smart_font_colour: config.smart_font_colour !== false,
       icon_tap_to_brightness: !!config.icon_tap_to_brightness,
@@ -1013,19 +1018,280 @@ class CompactLightCard extends HTMLElement {
       }
     }
 
-    // apply opacity
-    root.querySelector(".content").style.opacity = this.config.opacity;
-    root.querySelector(".icon").style.opacity = Math.max(Math.min(this.config.opacity * 1.5, 1), 0.3);
-    const shadowOpacity = 0.2 + (1 - this.config.opacity) * 0.4;
+    // apply opacity based on state (on/off) with separate icon and card control
+    const isOff = percentageText === "Off" || percentageText === "Unavailable";
+
+    // determine card opacity
+    let cardOpacity = this.config.opacity;
+    if (isOff && this.config.opacity_off !== null) {
+      cardOpacity = this.config.opacity_off;
+    } else if (!isOff && this.config.opacity_on !== null) {
+      cardOpacity = this.config.opacity_on;
+    }
+
+    // determine icon opacity
+    let iconOpacity = this.config.icon_opacity !== null ? this.config.icon_opacity : Math.max(Math.min(this.config.opacity * 1.5, 1), 0.3);
+    if (isOff && this.config.icon_opacity_off !== null) {
+      iconOpacity = this.config.icon_opacity_off;
+    } else if (!isOff && this.config.icon_opacity_on !== null) {
+      iconOpacity = this.config.icon_opacity_on;
+    }
+
+    root.querySelector(".content").style.opacity = cardOpacity;
+    root.querySelector(".icon").style.opacity = iconOpacity;
+
+    const shadowOpacity = 0.2 + (1 - cardOpacity) * 0.4;
     if (root.querySelector(".icon.no-border")) {
       root.querySelector(".icon.no-border").style.boxShadow = `rgba(0, 0, 0, ${shadowOpacity}) 0px 5px 15px`;
     }
     root.querySelector(".card").style.backdropFilter = `blur(${this.config.blur}px)`;
   }
 
+  static getConfigElement() {
+    return document.createElement("compact-light-card-editor");
+  }
 }
 
-// register card
+// Visual Editor for the card
+class CompactLightCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = {};
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    this.render();
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        .editor {
+          padding: 16px;
+          font-family: var(--paper-font-body1_-_font-family);
+        }
+        .section {
+          margin-bottom: 24px;
+          border-bottom: 1px solid var(--divider-color, #e0e0e0);
+          padding-bottom: 16px;
+        }
+        .section:last-child {
+          border-bottom: none;
+        }
+        .section-title {
+          font-weight: bold;
+          font-size: 14px;
+          margin-bottom: 12px;
+          color: var(--primary-text-color);
+        }
+        .row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          gap: 12px;
+        }
+        .row label {
+          flex: 1;
+          font-size: 14px;
+          color: var(--primary-text-color);
+        }
+        .row input[type="text"],
+        .row input[type="number"] {
+          flex: 1;
+          padding: 8px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 4px;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color);
+        }
+        .row input[type="checkbox"] {
+          width: 20px;
+          height: 20px;
+        }
+        .row select {
+          flex: 1;
+          padding: 8px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 4px;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color);
+        }
+        .hint {
+          font-size: 11px;
+          color: var(--secondary-text-color);
+          margin-top: 2px;
+        }
+        ha-entity-picker {
+          width: 100%;
+        }
+      </style>
+      <div class="editor">
+        <div class="section">
+          <div class="section-title">Basic Settings</div>
+          <div class="row">
+            <label>Entity *</label>
+            <input type="text" id="entity" value="${this._config.entity || ""}" placeholder="light.bedroom">
+          </div>
+          <div class="row">
+            <label>Name</label>
+            <input type="text" id="name" value="${this._config.name || ""}" placeholder="Optional display name">
+          </div>
+          <div class="row">
+            <label>Icon</label>
+            <input type="text" id="icon" value="${this._config.icon || ""}" placeholder="mdi:lightbulb">
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Appearance</div>
+          <div class="row">
+            <label>Height (px)</label>
+            <input type="number" id="height" value="${this._config.height || 64}" min="30" max="150">
+          </div>
+          <div class="row">
+            <label>Font Size (px)</label>
+            <input type="number" id="font_size" value="${this._config.font_size || 18}" min="8" max="36">
+          </div>
+          <div class="row">
+            <label>Primary Colour</label>
+            <input type="text" id="primary_colour" value="${this._config.primary_colour || ""}" placeholder="#ff890e">
+          </div>
+          <div class="row">
+            <label>Secondary Colour</label>
+            <input type="text" id="secondary_colour" value="${this._config.secondary_colour || ""}" placeholder="#eec59a">
+          </div>
+          <div class="row">
+            <label>Glow Effect</label>
+            <input type="checkbox" id="glow" ${this._config.glow !== false ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Smart Font Colour</label>
+            <input type="checkbox" id="smart_font_colour" ${this._config.smart_font_colour !== false ? "checked" : ""}>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Borders</div>
+          <div class="row">
+            <label>Icon Border</label>
+            <input type="checkbox" id="icon_border" ${this._config.icon_border ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Icon Border Colour</label>
+            <input type="text" id="icon_border_colour" value="${this._config.icon_border_colour || ""}" placeholder="#e0e0e0">
+          </div>
+          <div class="row">
+            <label>Card Border</label>
+            <input type="checkbox" id="card_border" ${this._config.card_border ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Card Border Colour</label>
+            <input type="text" id="card_border_colour" value="${this._config.card_border_colour || ""}" placeholder="#e0e0e0">
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Opacity (0.0 - 1.0)</div>
+          <div class="row">
+            <label>Default Opacity</label>
+            <input type="number" id="opacity" value="${this._config.opacity !== undefined ? this._config.opacity : 1}" min="0" max="1" step="0.1">
+          </div>
+          <div class="row">
+            <label>Opacity When On</label>
+            <input type="number" id="opacity_on" value="${this._config.opacity_on || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+          </div>
+          <div class="row">
+            <label>Opacity When Off</label>
+            <input type="number" id="opacity_off" value="${this._config.opacity_off || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+          </div>
+          <div class="row">
+            <label>Icon Opacity</label>
+            <input type="number" id="icon_opacity" value="${this._config.icon_opacity || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+          </div>
+          <div class="row">
+            <label>Icon Opacity When On</label>
+            <input type="number" id="icon_opacity_on" value="${this._config.icon_opacity_on || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+          </div>
+          <div class="row">
+            <label>Icon Opacity When Off</label>
+            <input type="number" id="icon_opacity_off" value="${this._config.icon_opacity_off || ""}" min="0" max="1" step="0.1" placeholder="Optional">
+          </div>
+          <div class="row">
+            <label>Blur</label>
+            <input type="number" id="blur" value="${this._config.blur || 0}" min="0" max="10" step="1">
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Icon Tap Behaviour</div>
+          <div class="row">
+            <label>Tap Icon for Specific Brightness</label>
+            <input type="checkbox" id="icon_tap_to_brightness" ${this._config.icon_tap_to_brightness ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Turn On Brightness (%)</label>
+            <input type="number" id="turn_on_brightness" value="${this._config.turn_on_brightness || 100}" min="1" max="100">
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add event listeners
+    this.shadowRoot.querySelectorAll("input, select").forEach((input) => {
+      input.addEventListener("change", (e) => this._valueChanged(e));
+      input.addEventListener("input", (e) => {
+        if (e.target.type === "text" || e.target.type === "number") {
+          this._valueChanged(e);
+        }
+      });
+    });
+  }
+
+  _valueChanged(ev) {
+    if (!this._config) return;
+
+    const target = ev.target;
+    const id = target.id;
+    let value;
+
+    if (target.type === "checkbox") {
+      value = target.checked;
+    } else if (target.type === "number") {
+      value = target.value === "" ? undefined : parseFloat(target.value);
+    } else {
+      value = target.value || undefined;
+    }
+
+    // Handle special cases
+    if (id === "glow" || id === "smart_font_colour") {
+      // These default to true, so only set if false
+      if (value === true) {
+        delete this._config[id];
+      } else {
+        this._config[id] = value;
+      }
+    } else if (value === undefined || value === "") {
+      delete this._config[id];
+    } else {
+      this._config[id] = value;
+    }
+
+    // Fire config changed event
+    const event = new CustomEvent("config-changed", {
+      detail: { config: this._config },
+      bubbles: true,
+      composed: true,
+    });
+    this.dispatchEvent(event);
+  }
+}
+
+// register card and editor
+customElements.define("compact-light-card-editor", CompactLightCardEditor);
 customElements.define('compact-light-card', CompactLightCard);
 
 // make it appear in visual card picker
