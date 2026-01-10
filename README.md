@@ -1,8 +1,10 @@
 # Compact Light Card
-[![GitHub Release](https://img.shields.io/github/v/release/goggybox/compact-light-card?include_prereleases&style=flat-square)](https://github.com/goggybox/compact-light-card/releases)
-[![HACS Compatible](https://img.shields.io/badge/HACS-Default-blue.svg?style=flat-square)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/lewisburgess/compact-light-card?include_prereleases&style=flat-square)](https://github.com/lewisburgess/compact-light-card/releases)
+[![HACS Compatible](https://img.shields.io/badge/HACS-Custom-blue.svg?style=flat-square)](https://github.com/hacs/integration)
 
 A clean, compact, and highly customisable light card for Home Assistant.
+
+> **Note:** This is a forked version of [goggybox's Compact Light Card](https://github.com/goggybox/compact-light-card) with additional controls and features.
 
 ![Image 1](img/img1.png)
 
@@ -135,7 +137,7 @@ show_rgb_button: false  # Hide RGB button even if supported
   ```yaml
   chevron_action:
     action: url
-    url_path: https://github.com/goggybox/compact-light-card/
+    url_path: https://github.com/lewisburgess/compact-light-card/
   ```
   The supported actions are `more-info`, `toggle`, `navigate`, `url`, and `perform-action`/`call-service`.
 - `chevron_double_tap_action:` customises the action performed when the chevron is double clicked, configured the same way as `chevron_action:`. By default, there is no action configured for a double tap.
@@ -171,14 +173,15 @@ Examples of the customisations:
 
 Use this link to open the repository in HACS:
 
-[![Open repo in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=goggybox&repository=compact-light-card)
+[![Open repo in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lewisburgess&repository=compact-light-card)
 
 Alternatively:
 
 - Open HACS in Home Assistant.
+- Go to Frontend > Custom repositories.
+- Add `https://github.com/lewisburgess/compact-light-card` as a custom repository (category: Lovelace).
 - Search for "Compact Light Card".
-- Ensure the result has the creator as "goggybox".
 - Click download!
 
 ## License
-GPLv3.0 © [goggybox](https://github.com/goggybox)
+GPLv3.0 © [goggybox](https://github.com/goggybox), [lewisburgess](https://github.com/lewisburgess)
