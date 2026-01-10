@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.24 loaded!");
+console.log("compact-light-card.js v0.6.25 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -165,7 +165,12 @@ class CompactLightCard extends HTMLElement {
         .right-info {
           display: flex;
           align-items: center;
-          gap: 16px;
+          gap: 8px;
+          height: 100%;
+          padding: 0 8px 0 12px;
+          border-radius: 0 12px 12px 0;
+          background: var(--light-primary-colour, var(--secondary-background-color));
+          transition: background 0.3s ease;
         }
 
         .percentage {
@@ -174,10 +179,7 @@ class CompactLightCard extends HTMLElement {
         }
 
         .arrow {
-          padding-right: 10px;
           --mdc-icon-size: 28px;
-          padding-top: 20px;
-          padding-bottom: 20px;
           color: var(--primary-text-color);
           pointer-events: auto;
         }
@@ -606,13 +608,43 @@ class CompactLightCard extends HTMLElement {
     return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
   }
 
+  _colorTempToRgb(mireds) {
+    // Convert mireds to Kelvin, then to approximate RGB
+    const kelvin = 1000000 / mireds;
+    let r, g, b;
+
+    // Algorithm based on Tanner Helland's work
+    const temp = kelvin / 100;
+
+    if (temp <= 66) {
+      r = 255;
+      g = Math.min(255, Math.max(0, 99.4708025861 * Math.log(temp) - 161.1195681661));
+    } else {
+      r = Math.min(255, Math.max(0, 329.698727446 * Math.pow(temp - 60, -0.1332047592)));
+      g = Math.min(255, Math.max(0, 288.1221695283 * Math.pow(temp - 60, -0.0755148492)));
+    }
+
+    if (temp >= 66) {
+      b = 255;
+    } else if (temp <= 19) {
+      b = 0;
+    } else {
+      b = Math.min(255, Math.max(0, 138.5177312231 * Math.log(temp - 10) - 305.0447927307));
+    }
+
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+  }
+
   // get the usable width of the brightness bar area (minus the icon underlap)
   getUsableWidth = () => {
     const buffer = 4;
     const contentEl = this.shadowRoot.querySelector(".content");
+    const rightInfoEl = this.shadowRoot.querySelector(".right-info");
     const contentStyle = getComputedStyle(contentEl);
     const paddingRight = parseFloat(contentStyle.paddingRight);
-    const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
+    // Subtract the right-info width from the usable area
+    const rightInfoWidth = rightInfoEl ? rightInfoEl.offsetWidth : 0;
+    const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset - rightInfoWidth;
     return contentWidth;
   };
 
@@ -953,14 +985,16 @@ class CompactLightCard extends HTMLElement {
 
     // Update mode display when state changes
     this._updateModeDisplay = () => {
-      const { brightnessPercent, colorTempPercent, colorTemp, hue } = this._getCardState();
+      const { brightnessPercent, colorTempPercent, colorTemp, hue, primaryColour } = this._getCardState();
       const percentageEl = this.shadowRoot.querySelector(".percentage");
       const markerEl = this.shadowRoot.querySelector(".color-marker");
+      const rightInfoEl = this.shadowRoot.querySelector(".right-info");
       const stateObj = this._hass.states[this.config.entity];
 
       if (!stateObj || stateObj.state !== "on") return;
 
       let displayValue;
+      let rightInfoBg = primaryColour;
       const usableWidth = this.getUsableWidth();
 
       switch (this._currentMode) {
@@ -973,6 +1007,8 @@ class CompactLightCard extends HTMLElement {
             const tempPercent = colorTempPercent / 100;
             const markerPosTemp = window.left_offset + tempPercent * usableWidth;
             if (!this.isDragging) markerEl.style.left = `${markerPosTemp}px`;
+            // Set right-info background to color temp color
+            rightInfoBg = this._colorTempToRgb(colorTemp);
           } else {
             displayValue = "—";
           }
@@ -984,12 +1020,22 @@ class CompactLightCard extends HTMLElement {
             const huePercent = hue / 360;
             const markerPosRgb = window.left_offset + huePercent * usableWidth;
             if (!this.isDragging) markerEl.style.left = `${markerPosRgb}px`;
+            // Set right-info background to hue color
+            const [r, g, b] = this._hueToRgb(hue);
+            rightInfoBg = `rgb(${r}, ${g}, ${b})`;
           } else {
             displayValue = "—";
           }
           break;
         default: // brightness
           displayValue = `${brightnessPercent}%`;
+          // Use light's primary colour for brightness mode
+          rightInfoBg = primaryColour;
+      }
+
+      // Update right-info background
+      if (rightInfoEl && !this.isDragging) {
+        rightInfoEl.style.background = rightInfoBg;
       }
 
       if (!this.isDragging && percentageEl) {
@@ -1028,14 +1074,17 @@ class CompactLightCard extends HTMLElement {
       this.pendingUpdate = requestAnimationFrame(() => {
         const usableWidth = this.getUsableWidth();
         const markerEl = this.shadowRoot.querySelector(".color-marker");
-        let percent, displayText;
+        const rightInfoEl = this.shadowRoot.querySelector(".right-info");
+        let percent, displayText, rightInfoBg;
 
         switch (this._currentMode) {
           case "color_temp":
             percent = value / 100;
-            // Convert to Kelvin approximation (typical range 2700K-6500K)
-            const kelvin = Math.round(2700 + (value / 100) * (6500 - 2700));
+            // Convert percentage to mireds for color calculation
+            const mireds = this.minMireds + ((100 - value) / 100) * (this.maxMireds - this.minMireds);
+            const kelvin = Math.round(1000000 / mireds);
             displayText = `${kelvin}K`;
+            rightInfoBg = this._colorTempToRgb(mireds);
             // Position the marker
             const markerPosTemp = window.left_offset + percent * usableWidth;
             markerEl.style.left = `${markerPosTemp}px`;
@@ -1043,6 +1092,9 @@ class CompactLightCard extends HTMLElement {
           case "rgb":
             percent = value / 360;
             displayText = `${Math.round(value)}°`;
+            // Convert hue to RGB for background
+            const [r, g, b] = this._hueToRgb(value);
+            rightInfoBg = `rgb(${r}, ${g}, ${b})`;
             // Position the marker
             const markerPosRgb = window.left_offset + percent * usableWidth;
             markerEl.style.left = `${markerPosRgb}px`;
@@ -1054,6 +1106,13 @@ class CompactLightCard extends HTMLElement {
             const effectiveWidth = percent * usableWidth;
             const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
             barEl.style.width = `${totalWidth}px`;
+            // Keep current light color for brightness mode
+            rightInfoBg = null; // Don't change during brightness drag
+        }
+
+        // Update right-info background during drag
+        if (rightInfoEl && rightInfoBg) {
+          rightInfoEl.style.background = rightInfoBg;
         }
 
         if (percentageEl) percentageEl.textContent = displayText;
@@ -1392,6 +1451,17 @@ class CompactLightCard extends HTMLElement {
         nameEl.style.color = "var(--primary-text-color)";
         percentageEl.style.color = "var(--primary-text-color)";
         root.querySelector(".arrow").style.color = "var(--primary-text-color)";
+      }
+    }
+
+    // Update right-info background based on state
+    const rightInfoEl = root.querySelector(".right-info");
+    if (rightInfoEl) {
+      if (percentageText === "Off" || percentageText === "Unavailable") {
+        rightInfoEl.style.background = "var(--off-background-colour)";
+      } else {
+        // When on, use primary color (mode display will override if needed)
+        rightInfoEl.style.background = primaryColour || "var(--light-primary-colour)";
       }
     }
 
