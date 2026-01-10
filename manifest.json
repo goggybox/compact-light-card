@@ -1,8 +1,8 @@
 {
-  "domain": "compact_light_card_custom",
-  "name": "Compact Light Card Custom",
-  "documentation": "https://github.com/lewisburgess/compact-light-card-custom",
-  "version": "0.6.7",
+  "domain": "compact_light_card",
+  "name": "Compact Light Card",
+  "documentation": "https://github.com/lewisburgess/compact-light-card",
+  "version": "0.6.9",
   "dependencies": [],
   "codeowners": ["@lewisburgess"],
   "requirements": []
