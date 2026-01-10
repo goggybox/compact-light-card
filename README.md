@@ -103,6 +103,31 @@ icon_tap_to_brightness: true
 turn_on_brightness: 50
 ```
 
+### Color Mode Controls
+
+For lights that support color temperature and/or RGB color, mode toggle buttons appear to the right of the slider. These allow you to switch between controlling brightness, color temperature, or color hue.
+
+- `show_color_temp_button: true/false` - Show/hide the color temperature button (default: `true` if light supports it)
+- `show_rgb_button: true/false` - Show/hide the RGB color button (default: `true` if light supports it)
+
+**Mode behavior:**
+- **Brightness mode** (sun icon): Slider controls brightness 1-100%
+- **Color Temperature mode** (thermometer icon): Slider controls color temperature from warm (left) to cool (right)
+- **RGB/Color mode** (palette icon): Slider controls hue 0-360° through the color spectrum
+
+The mode buttons only appear when:
+1. The light supports that color mode
+2. The corresponding `show_*_button` config is not set to `false`
+3. There are at least 2 modes available (buttons are hidden if only brightness is supported)
+
+Example:
+```yaml
+type: custom:compact-light-card
+entity: light.bedroom
+show_color_temp_button: true
+show_rgb_button: false  # Hide RGB button even if supported
+```
+
 ### Chevron Actions
 
 - `chevron_action:` customises the action performed when the chevron is clicked. Default HA action configuration is expected:

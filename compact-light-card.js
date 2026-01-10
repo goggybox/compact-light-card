@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.21 loaded!");
+console.log("compact-light-card.js v0.6.22 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -19,11 +19,15 @@ class CompactLightCard extends HTMLElement {
     this.startX = 0;
     this.startWidth = 0;
     this.supportsBrightness = true;
+    this.supportsColorTemp = false;
+    this.supportsRgb = false;
     this.pendingUpdate = null;
     this._hass = null;
     this._listenersInitialized = false;
     this._iconListenerInitialized = false;
     this._arrowListenerInitialized = false;
+    this._modeButtonsInitialized = false;
+    this._currentMode = "brightness"; // brightness, color_temp, rgb
     this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -160,6 +164,35 @@ class CompactLightCard extends HTMLElement {
           pointer-events: auto;
         }
 
+        .mode-buttons {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          pointer-events: auto;
+        }
+
+        .mode-btn {
+          --mdc-icon-size: 20px;
+          padding: 4px;
+          border-radius: 50%;
+          cursor: pointer;
+          opacity: 0.5;
+          transition: opacity 0.2s ease, background 0.2s ease;
+        }
+
+        .mode-btn:hover {
+          opacity: 0.8;
+        }
+
+        .mode-btn.active {
+          opacity: 1;
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .mode-btn.hidden {
+          display: none;
+        }
+
         .haicon {
           position: absolute;
           left: 0;
@@ -193,6 +226,11 @@ class CompactLightCard extends HTMLElement {
             <div class="name">Loading...</div>
             <div class="right-info">
               <span class="percentage">—</span>
+              <div class="mode-buttons">
+                <ha-icon class="mode-btn active" id="mode-brightness" icon="mdi:brightness-6" title="Brightness"></ha-icon>
+                <ha-icon class="mode-btn hidden" id="mode-colortemp" icon="mdi:thermometer" title="Color Temperature"></ha-icon>
+                <ha-icon class="mode-btn hidden" id="mode-rgb" icon="mdi:palette" title="Color"></ha-icon>
+              </div>
               <ha-icon class="arrow" icon="mdi:chevron-right"></ha-icon>
             </div>
           </div>
@@ -307,6 +345,8 @@ class CompactLightCard extends HTMLElement {
       height: config.height !== undefined ? Math.max(30, Math.min(150, config.height)) : 64,
       font_size: config.font_size !== undefined ? Math.max(8, Math.min(36, config.font_size)) : 18,
       icon_background_colour: config.icon_background_colour || null,
+      show_color_temp_button: config.show_color_temp_button !== false, // default true if supported
+      show_rgb_button: config.show_rgb_button !== false, // default true if supported
     };
 
     // validate off_colours structure
@@ -386,7 +426,11 @@ class CompactLightCard extends HTMLElement {
         brightnessPercent: null,
         primaryColour: null,
         secondaryColour: null,
-        icon: null
+        icon: null,
+        colorTemp: null,
+        colorTempPercent: null,
+        rgbColor: null,
+        hue: null
       };
     }
 
@@ -401,14 +445,27 @@ class CompactLightCard extends HTMLElement {
         brightnessPercent: 0,
         primaryColour: "#9e9e9e",
         secondaryColour: "#e0e0e0",
-        icon: "mdi:alert"
+        icon: "mdi:alert",
+        colorTemp: null,
+        colorTempPercent: null,
+        rgbColor: null,
+        hue: null
       };
     }
 
     const state = stateObj.state;
     const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace("light.", "");
     const friendlyName = tempName.length > 30 ? tempName.slice(0, 30) + "..." : tempName;
-    this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);;
+    this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);
+
+    // detect color capabilities
+    const colorModes = stateObj.attributes.supported_color_modes || [];
+    this.supportsColorTemp = colorModes.includes("color_temp");
+    this.supportsRgb = colorModes.some(mode => ["rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode));
+
+    // get color temp range
+    this.minMireds = stateObj.attributes.min_mireds || 153;
+    this.maxMireds = stateObj.attributes.max_mireds || 500;
 
     // determine brightness and display text
     let brightnessPercent = 0;
@@ -423,6 +480,26 @@ class CompactLightCard extends HTMLElement {
       }
     } else if (state == "unavailable") {
       displayText = "Unavailable";
+    }
+
+    // get color temperature
+    let colorTemp = null;
+    let colorTempPercent = null;
+    if (stateObj.attributes.color_temp) {
+      colorTemp = stateObj.attributes.color_temp;
+      // Convert mireds to percentage (inverted: warm = low mireds = high %)
+      colorTempPercent = Math.round(((this.maxMireds - colorTemp) / (this.maxMireds - this.minMireds)) * 100);
+      colorTempPercent = Math.max(0, Math.min(100, colorTempPercent));
+    }
+
+    // get RGB color and hue
+    let rgbColor = stateObj.attributes.rgb_color || null;
+    let hue = null;
+    if (stateObj.attributes.hs_color) {
+      hue = Math.round(stateObj.attributes.hs_color[0]); // 0-360
+    } else if (rgbColor) {
+      // Convert RGB to hue
+      hue = this._rgbToHue(rgbColor[0], rgbColor[1], rgbColor[2]);
     }
 
     // determine colour
@@ -453,9 +530,44 @@ class CompactLightCard extends HTMLElement {
       brightnessPercent,
       primaryColour,
       secondaryColour,
-      icon
+      icon,
+      colorTemp,
+      colorTempPercent,
+      rgbColor,
+      hue
     };
 
+  }
+
+  _rgbToHue(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0;
+    if (max !== min) {
+      const d = max - min;
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+    return Math.round(h * 360);
+  }
+
+  _hueToRgb(h) {
+    // Convert hue (0-360) to RGB with full saturation and lightness
+    const s = 1, l = 0.5;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60) { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
   }
 
   // get the usable width of the brightness bar area (minus the icon underlap)
@@ -726,77 +838,240 @@ class CompactLightCard extends HTMLElement {
       this._arrowListenerInitialized = true;
     }
 
-    // convert mouse/touch X to brightness %
-    // 1% starts immediately to the right of the icon
-    const getBrightnessFromX = (clientX) => {
+    // setup mode buttons - show/hide based on capabilities and config
+    const modeBrightnessBtn = this.shadowRoot.querySelector("#mode-brightness");
+    const modeColorTempBtn = this.shadowRoot.querySelector("#mode-colortemp");
+    const modeRgbBtn = this.shadowRoot.querySelector("#mode-rgb");
+
+    // Show/hide mode buttons based on capabilities and config
+    if (this.supportsColorTemp && this.config.show_color_temp_button) {
+      modeColorTempBtn.classList.remove("hidden");
+    } else {
+      modeColorTempBtn.classList.add("hidden");
+    }
+    if (this.supportsRgb && this.config.show_rgb_button) {
+      modeRgbBtn.classList.remove("hidden");
+    } else {
+      modeRgbBtn.classList.add("hidden");
+    }
+
+    // Hide brightness button if it's the only one (no point showing just one button)
+    const hasMultipleModes = (this.supportsColorTemp && this.config.show_color_temp_button) ||
+                              (this.supportsRgb && this.config.show_rgb_button);
+    if (!hasMultipleModes) {
+      modeBrightnessBtn.classList.add("hidden");
+    } else {
+      modeBrightnessBtn.classList.remove("hidden");
+    }
+
+    // Register mode button click handlers - only once
+    if (!this._modeButtonsInitialized) {
+      const setActiveMode = (mode) => {
+        this._currentMode = mode;
+        modeBrightnessBtn.classList.toggle("active", mode === "brightness");
+        modeColorTempBtn.classList.toggle("active", mode === "color_temp");
+        modeRgbBtn.classList.toggle("active", mode === "rgb");
+
+        // Update bar color based on mode
+        const barEl = this.shadowRoot.querySelector(".brightness-bar");
+        if (mode === "color_temp") {
+          barEl.style.background = "linear-gradient(to right, #ffa500, #87ceeb)";
+        } else if (mode === "rgb") {
+          barEl.style.background = "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)";
+        } else {
+          barEl.style.background = "var(--light-primary-colour)";
+        }
+
+        // Update display for current mode
+        this._updateModeDisplay();
+      };
+
+      modeBrightnessBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setActiveMode("brightness");
+      });
+      modeColorTempBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setActiveMode("color_temp");
+      });
+      modeRgbBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setActiveMode("rgb");
+      });
+
+      this._modeButtonsInitialized = true;
+    }
+
+    // Update mode display when state changes
+    this._updateModeDisplay = () => {
+      const { brightnessPercent, colorTempPercent, hue } = this._getCardState();
+      const percentageEl = this.shadowRoot.querySelector(".percentage");
+      const barEl = this.shadowRoot.querySelector(".brightness-bar");
+      const stateObj = this._hass.states[this.config.entity];
+
+      if (!stateObj || stateObj.state !== "on") return;
+
+      let displayValue, barPercent;
+
+      switch (this._currentMode) {
+        case "color_temp":
+          displayValue = colorTempPercent !== null ? `${colorTempPercent}%` : "—";
+          barPercent = colorTempPercent || 50;
+          break;
+        case "rgb":
+          displayValue = hue !== null ? `${hue}°` : "—";
+          barPercent = hue !== null ? (hue / 360) * 100 : 50;
+          break;
+        default: // brightness
+          displayValue = `${brightnessPercent}%`;
+          barPercent = brightnessPercent;
+      }
+
+      if (!this.isDragging && percentageEl) {
+        percentageEl.textContent = displayValue;
+      }
+    };
+
+    // convert mouse/touch X to value based on current mode
+    // Returns 0-100 for brightness/color_temp, 0-360 for hue
+    const getValueFromX = (clientX) => {
       const rect = brightnessEl.getBoundingClientRect();
       let x = clientX - (rect.left + window.left_offset);
       const usableWidth = this.getUsableWidth();
       x = Math.max(0, Math.min(x, usableWidth));
-      // Map 0 to usableWidth → 1% to 100%
-      const brightness = Math.round(1 + (x / usableWidth) * 99);
-      return Math.max(1, Math.min(100, brightness));
+      const percent = x / usableWidth;
+
+      switch (this._currentMode) {
+        case "color_temp":
+          return Math.round(percent * 100); // 0-100%
+        case "rgb":
+          return Math.round(percent * 360); // 0-360 hue
+        default: // brightness
+          return Math.round(1 + percent * 99); // 1-100%
+      }
     };
 
-    // update the width of the brightness bar (without applying the brightness to the light)
-    // brightness range is 1-100%, where 1% starts immediately right of the icon
-    const updateBarPreview = (brightness) => {
-      const roundedBrightness = Math.max(1, Math.round(brightness));
+    // Legacy alias for brightness mode
+    const getBrightnessFromX = getValueFromX;
 
+    // update the width of the bar and display text (without applying to light)
+    const updateBarPreview = (value) => {
       if (this.pendingUpdate) {
         cancelAnimationFrame(this.pendingUpdate);
       }
 
       this.pendingUpdate = requestAnimationFrame(() => {
         const usableWidth = this.getUsableWidth();
-        // Map 1-100% to 0-usableWidth for the bar portion beyond the icon
-        const effectiveWidth = ((roundedBrightness - 1) / 99) * usableWidth;
+        let percent, displayText;
+
+        switch (this._currentMode) {
+          case "color_temp":
+            percent = value / 100;
+            displayText = `${Math.round(value)}%`;
+            break;
+          case "rgb":
+            percent = value / 360;
+            displayText = `${Math.round(value)}°`;
+            break;
+          default: // brightness
+            percent = (value - 1) / 99;
+            displayText = `${Math.round(value)}%`;
+        }
+
+        const effectiveWidth = percent * usableWidth;
         const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
         barEl.style.width = `${totalWidth}px`;
-        if (percentageEl) percentageEl.textContent = `${roundedBrightness}%`;
+        if (percentageEl) percentageEl.textContent = displayText;
         this.pendingUpdate = null;
       });
     };
 
-    // apply actual brightness to the light (real-time)
+    // apply value to the light based on current mode
     let updateTimeout;
-    const applyBrightness = (hass, entityId, brightness) => {
-      // timeout prevents too many rapid updates
+    const applyValue = (hass, entityId, value) => {
       clearTimeout(updateTimeout);
       updateTimeout = setTimeout(() => {
-        const b = parseFloat(brightness);
-        if (isNaN(b)) return;
-        const brightness255 = Math.round((b / 100) * 255);
-        const clampedBrightness = Math.max(0, Math.min(255, brightness255));
-        hass.callService("light", "turn_on", {
-          entity_id: entityId,
-          brightness: clampedBrightness
-        });
+        const v = parseFloat(value);
+        if (isNaN(v)) return;
+
+        switch (this._currentMode) {
+          case "color_temp":
+            // Convert percentage to mireds (inverted: 100% = warm/high mireds)
+            const mireds = Math.round(this.minMireds + ((100 - v) / 100) * (this.maxMireds - this.minMireds));
+            hass.callService("light", "turn_on", {
+              entity_id: entityId,
+              color_temp: mireds
+            });
+            break;
+          case "rgb":
+            // Convert hue to hs_color
+            hass.callService("light", "turn_on", {
+              entity_id: entityId,
+              hs_color: [v, 100] // hue, saturation at 100%
+            });
+            break;
+          default: // brightness
+            const brightness255 = Math.round((v / 100) * 255);
+            hass.callService("light", "turn_on", {
+              entity_id: entityId,
+              brightness: Math.max(0, Math.min(255, brightness255))
+            });
+        }
       }, 125);
     };
 
+    // Legacy alias
+    const applyBrightness = applyValue;
+
+    // Track current value for dragging
+    let currentValue = brightnessPercent;
+
     // shared drag start logic
     const onDragStart = (clientX) => {
-      if (!this.supportsBrightness) {
+      // For brightness mode, check if brightness is supported
+      if (this._currentMode === "brightness" && !this.supportsBrightness) {
         return;
       }
+      // For color_temp mode, check if color temp is supported
+      if (this._currentMode === "color_temp" && !this.supportsColorTemp) {
+        return;
+      }
+      // For rgb mode, check if RGB is supported
+      if (this._currentMode === "rgb" && !this.supportsRgb) {
+        return;
+      }
+
       this.isDragging = true;
 
       // start dragging
       this.startX = clientX;
-      this.startWidth = getBrightnessFromX(clientX);
+      this.startWidth = getValueFromX(clientX);
 
-      // set brightness and bar to be at mouse X.
-      const brightness = this.startWidth;
-      updateBarPreview(brightness);
-      currentBrightness = brightness;
+      // set value and bar to be at mouse X
+      const value = this.startWidth;
+      updateBarPreview(value);
+      currentValue = value;
 
+      // Turn on light if it's off
       if (state !== "on") {
-        const brightness255 = Math.round((brightness / 100) * 255);
-        hass.callService("light", "turn_on", {
-          entity_id: this.config.entity,
-          brightness: Math.max(1, brightness255)
-        });
+        if (this._currentMode === "brightness") {
+          const brightness255 = Math.round((value / 100) * 255);
+          hass.callService("light", "turn_on", {
+            entity_id: this.config.entity,
+            brightness: Math.max(1, brightness255)
+          });
+        } else if (this._currentMode === "color_temp") {
+          const mireds = Math.round(this.minMireds + ((100 - value) / 100) * (this.maxMireds - this.minMireds));
+          hass.callService("light", "turn_on", {
+            entity_id: this.config.entity,
+            color_temp: mireds
+          });
+        } else if (this._currentMode === "rgb") {
+          hass.callService("light", "turn_on", {
+            entity_id: this.config.entity,
+            hs_color: [value, 100]
+          });
+        }
       }
 
       document.body.style.userSelect = "none";
@@ -810,12 +1085,24 @@ class CompactLightCard extends HTMLElement {
       }
 
       const dx = clientX - this.startX;
-      const rect = contentEl.getBoundingClientRect();
       const usableWidth = this.getUsableWidth();
-      const deltaPercent = (dx / usableWidth) * 100;
-      const newBrightness = Math.round(Math.max(1, Math.min(100, this.startWidth + deltaPercent)));
-      updateBarPreview(newBrightness);
-      currentBrightness = newBrightness;
+      const deltaPercent = (dx / usableWidth);
+
+      let newValue;
+      switch (this._currentMode) {
+        case "color_temp":
+          newValue = Math.round(Math.max(0, Math.min(100, this.startWidth + deltaPercent * 100)));
+          break;
+        case "rgb":
+          // Wrap hue around 0-360
+          newValue = Math.round((this.startWidth + deltaPercent * 360 + 360) % 360);
+          break;
+        default: // brightness
+          newValue = Math.round(Math.max(1, Math.min(100, this.startWidth + deltaPercent * 100)));
+      }
+
+      updateBarPreview(newValue);
+      currentValue = newValue;
     };
 
     // shared drag end logic
@@ -823,7 +1110,7 @@ class CompactLightCard extends HTMLElement {
       this.isDragging = false;
       document.body.style.userSelect = "";
       clearTimeout(updateTimeout);
-      applyBrightness(hass, entity, currentBrightness);
+      applyValue(hass, entity, currentValue);
 
       // re-enable transition for smooth state updates
       if (barEl.style.transition === "none") {
@@ -1442,6 +1729,18 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="row">
             <label>Turn On Brightness (%)</label>
             <input type="number" id="turn_on_brightness" value="${this._config.turn_on_brightness || 100}" min="1" max="100">
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Color Mode Controls</div>
+          <div class="row">
+            <label>Show Color Temp Button</label>
+            <input type="checkbox" id="show_color_temp_button" ${this._config.show_color_temp_button !== false ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Show RGB/Color Button</label>
+            <input type="checkbox" id="show_rgb_button" ${this._config.show_rgb_button !== false ? "checked" : ""}>
           </div>
         </div>
 
