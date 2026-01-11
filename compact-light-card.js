@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.60 loaded!");
+console.log("compact-light-card.js v0.7.01 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -202,21 +202,23 @@ class CompactLightCard extends HTMLElement {
         }
 
         .secondary-icon {
-          --mdc-icon-size: 24px;
+          --mdc-icon-size: 20px;
           color: var(--primary-text-color);
           pointer-events: auto;
           cursor: pointer;
-          opacity: 0.7;
-          transition: opacity 0.2s ease;
+          padding: 4px;
+          border-radius: 50%;
+          opacity: 0.5;
+          transition: opacity 0.2s ease, background 0.2s ease;
         }
 
         .secondary-icon:hover {
-          opacity: 1;
+          opacity: 0.8;
         }
 
         .secondary-icon.on {
           opacity: 1;
-          color: var(--primary-color, #03a9f4);
+          background: rgba(255, 255, 255, 0.2);
         }
 
         .secondary-icon.hidden {
@@ -224,9 +226,8 @@ class CompactLightCard extends HTMLElement {
         }
 
         .secondary-icon.swapped {
-          background: rgba(255, 255, 255, 0.15);
-          border-radius: 50%;
-          padding: 2px;
+          opacity: 1;
+          background: rgba(255, 255, 255, 0.2);
         }
 
         .mode-buttons {
