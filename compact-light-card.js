@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.43 loaded!");
+console.log("compact-light-card.js v0.6.44 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1956,7 +1956,11 @@ class CompactLightCardEditor extends HTMLElement {
     this._setupEventListeners();
   }
 
-  _setupHaPickers() {
+  async _setupHaPickers() {
+    // Wait for custom elements to be defined
+    await customElements.whenDefined("ha-entity-picker");
+    await customElements.whenDefined("ha-icon-picker");
+
     // Entity picker - set value property directly after render
     const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
     if (entityPicker) {
