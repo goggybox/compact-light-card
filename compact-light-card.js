@@ -9,7 +9,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.30 loaded!");
+console.log("compact-light-card.js v0.6.32 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -30,6 +30,7 @@ class CompactLightCard extends HTMLElement {
     this._iconListenerInitialized = false;
     this._arrowListenerInitialized = false;
     this._modeButtonsInitialized = false;
+    this._secondaryIconListenerInitialized = false;
     this._currentMode = "brightness"; // brightness, color_temp, rgb
     this.shadowRoot.innerHTML = `
       <style>
@@ -222,6 +223,29 @@ class CompactLightCard extends HTMLElement {
           display: none;
         }
 
+        .secondary-icon {
+          --mdc-icon-size: 22px;
+          padding: 4px;
+          border-radius: 50%;
+          cursor: pointer;
+          opacity: 0.7;
+          transition: opacity 0.2s ease, background 0.2s ease;
+          pointer-events: auto;
+        }
+
+        .secondary-icon:hover {
+          opacity: 1;
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .secondary-icon.on {
+          opacity: 1;
+        }
+
+        .secondary-icon.hidden {
+          display: none;
+        }
+
         .color-marker {
           position: absolute;
           top: 0;
@@ -273,6 +297,7 @@ class CompactLightCard extends HTMLElement {
             <div class="name">Loading...</div>
             <div class="right-info">
               <span class="percentage">—</span>
+              <ha-icon class="secondary-icon hidden" id="secondary-icon" icon="mdi:lightbulb" title="Secondary"></ha-icon>
               <div class="mode-buttons">
                 <ha-icon class="mode-btn active" id="mode-brightness" icon="mdi:brightness-6" title="Brightness"></ha-icon>
                 <ha-icon class="mode-btn hidden" id="mode-colortemp" icon="mdi:thermometer" title="Color Temperature"></ha-icon>
@@ -402,6 +427,10 @@ class CompactLightCard extends HTMLElement {
       show_color_temp_button: config.show_color_temp_button !== false, // default true if supported
       show_rgb_button: config.show_rgb_button !== false, // default true if supported
       show_value_bar: config.show_value_bar === true, // default false - solid background behind buttons
+      secondary_entity: config.secondary_entity || null, // e.g., light entity for a fan, or fan entity for a light
+      show_secondary_icon: config.show_secondary_icon !== false, // show secondary entity icon (default true if secondary_entity set)
+      slider_mode: config.slider_mode || "absolute", // "absolute" (jumps to touch) or "relative" (slides from current)
+      slider_turns_on: config.slider_turns_on !== false, // whether touching slider turns on the light (default true)
     };
 
     // validate off_colours structure
@@ -994,6 +1023,53 @@ class CompactLightCard extends HTMLElement {
       rightInfoEl.classList.remove("value-bar");
     }
 
+    // Handle secondary entity icon
+    const secondaryIconEl = this.shadowRoot.querySelector("#secondary-icon");
+    if (secondaryIconEl) {
+      if (this.config.secondary_entity && this.config.show_secondary_icon) {
+        const secondaryStateObj = hass.states[this.config.secondary_entity];
+        const secondaryDomain = this.config.secondary_entity.split(".")[0];
+
+        // Show the icon
+        secondaryIconEl.classList.remove("hidden");
+
+        // Set appropriate icon based on secondary entity type
+        const secondaryIcon = secondaryDomain === "fan" ? "mdi:fan" : "mdi:lightbulb";
+        secondaryIconEl.setAttribute("icon", secondaryIcon);
+        secondaryIconEl.setAttribute("title", secondaryStateObj?.attributes?.friendly_name || this.config.secondary_entity);
+
+        // Update on/off state
+        if (secondaryStateObj && secondaryStateObj.state === "on") {
+          secondaryIconEl.classList.add("on");
+        } else {
+          secondaryIconEl.classList.remove("on");
+        }
+
+        // Register click handler - only once
+        if (!this._secondaryIconListenerInitialized) {
+          secondaryIconEl.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            const secEntityId = this.config.secondary_entity;
+            const secStateObj = this._hass.states[secEntityId];
+            if (!secStateObj) return;
+
+            const secDomain = secEntityId.split(".")[0];
+
+            // Toggle secondary entity
+            if (secStateObj.state === "on") {
+              this._hass.callService(secDomain, "turn_off", { entity_id: secEntityId });
+            } else {
+              this._hass.callService(secDomain, "turn_on", { entity_id: secEntityId });
+            }
+          });
+          this._secondaryIconListenerInitialized = true;
+        }
+      } else {
+        // Hide secondary icon if not configured
+        secondaryIconEl.classList.add("hidden");
+      }
+    }
+
     // Register mode button click handlers - only once
     if (!this._modeButtonsInitialized) {
       const setActiveMode = (mode) => {
@@ -1261,15 +1337,23 @@ class CompactLightCard extends HTMLElement {
 
       // start dragging
       this.startX = clientX;
-      this.startWidth = getValueFromX(clientX);
 
-      // set value and bar to be at mouse X
-      const value = this.startWidth;
-      updateBarPreview(value);
-      currentValue = value;
+      // In "relative" mode, start from current value; in "absolute" mode, jump to touch position
+      if (this.config.slider_mode === "relative") {
+        // Use current brightness/value as starting point
+        this.startWidth = currentValue;
+        // Don't update bar preview on touch - only on move
+      } else {
+        // Absolute mode: jump to touch position
+        this.startWidth = getValueFromX(clientX);
+        const value = this.startWidth;
+        updateBarPreview(value);
+        currentValue = value;
+      }
 
-      // Turn on device if it's off
-      if (state !== "on") {
+      // Turn on device if it's off (only if slider_turns_on is enabled)
+      if (state !== "on" && this.config.slider_turns_on) {
+        const value = this.config.slider_mode === "relative" ? currentValue : this.startWidth;
         if (this._currentMode === "brightness") {
           if (this.isFan) {
             // Fan uses percentage
@@ -1602,9 +1686,9 @@ class CompactLightCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // Update entity picker if it exists
-    const entityPicker = this.shadowRoot?.querySelector("ha-entity-picker");
-    if (entityPicker) entityPicker.hass = hass;
+    // Update all entity pickers
+    const entityPickers = this.shadowRoot?.querySelectorAll("ha-entity-picker");
+    if (entityPickers) entityPickers.forEach(picker => picker.hass = hass);
     const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
     if (iconPicker) iconPicker.hass = hass;
   }
@@ -1792,7 +1876,7 @@ class CompactLightCardEditor extends HTMLElement {
               id="entity"
               .hass=${this._hass}
               .value=${this._config.entity || ""}
-              .includeDomains=${["light"]}
+              .includeDomains=${["light", "fan"]}
               allow-custom-entity
             ></ha-entity-picker>
           </div>
@@ -1807,6 +1891,20 @@ class CompactLightCardEditor extends HTMLElement {
               .hass=${this._hass}
               .value=${this._config.icon || "mdi:lightbulb"}
             ></ha-icon-picker>
+          </div>
+          <div class="row">
+            <label>Secondary Entity</label>
+            <ha-entity-picker
+              id="secondary_entity"
+              .hass=${this._hass}
+              .value=${this._config.secondary_entity || ""}
+              .includeDomains=${["light", "fan"]}
+              allow-custom-entity
+            ></ha-entity-picker>
+          </div>
+          <div class="row">
+            <label>Show Secondary Icon</label>
+            <input type="checkbox" id="show_secondary_icon" ${this._config.show_secondary_icon !== false ? "checked" : ""}>
           </div>
         </div>
 
@@ -1982,6 +2080,21 @@ class CompactLightCardEditor extends HTMLElement {
         </div>
 
         <div class="section">
+          <div class="section-title">Slider Behaviour</div>
+          <div class="row">
+            <label>Slider Mode</label>
+            <select id="slider_mode">
+              <option value="absolute" ${(!this._config.slider_mode || this._config.slider_mode === "absolute") ? "selected" : ""}>Absolute (jump to touch)</option>
+              <option value="relative" ${this._config.slider_mode === "relative" ? "selected" : ""}>Relative (slide from current)</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Slider turns on light</label>
+            <input type="checkbox" id="slider_turns_on" ${this._config.slider_turns_on !== false ? "checked" : ""}>
+          </div>
+        </div>
+
+        <div class="section">
           <div class="section-title">Color Mode Controls</div>
           <div class="row">
             <label>Show Color Temp Button</label>
@@ -2031,15 +2144,32 @@ class CompactLightCardEditor extends HTMLElement {
   }
 
   _setupHaPickers() {
-    // Entity picker - set value property directly after render
-    const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
+    // Primary entity picker - set value property directly after render
+    const entityPicker = this.shadowRoot.querySelector("#entity");
     if (entityPicker) {
       entityPicker.hass = this._hass;
       entityPicker.value = this._config.entity || "";
-      entityPicker.includeDomains = ["light"];
+      entityPicker.includeDomains = ["light", "fan"];
       entityPicker.allowCustomEntity = true;
       entityPicker.addEventListener("value-changed", (e) => {
         this._config.entity = e.detail.value;
+        this._fireConfigChanged();
+      });
+    }
+
+    // Secondary entity picker
+    const secondaryEntityPicker = this.shadowRoot.querySelector("#secondary_entity");
+    if (secondaryEntityPicker) {
+      secondaryEntityPicker.hass = this._hass;
+      secondaryEntityPicker.value = this._config.secondary_entity || "";
+      secondaryEntityPicker.includeDomains = ["light", "fan"];
+      secondaryEntityPicker.allowCustomEntity = true;
+      secondaryEntityPicker.addEventListener("value-changed", (e) => {
+        if (e.detail.value) {
+          this._config.secondary_entity = e.detail.value;
+        } else {
+          delete this._config.secondary_entity;
+        }
         this._fireConfigChanged();
       });
     }
@@ -2221,7 +2351,8 @@ class CompactLightCardEditor extends HTMLElement {
     }
 
     // Handle special cases
-    if (id === "glow" || id === "smart_font_colour") {
+    // These are booleans with default true - only store in config when false
+    if (id === "glow" || id === "smart_font_colour" || id === "slider_turns_on" || id === "show_secondary_icon") {
       if (value === true) {
         delete this._config[id];
       } else {
