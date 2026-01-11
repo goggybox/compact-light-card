@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.57 loaded!");
+console.log("compact-light-card.js v0.6.58 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -54,6 +54,10 @@ class CompactLightCard extends HTMLElement {
           margin: 0;
           overflow: hidden;
           box-sizing: border-box;
+        }
+
+        .card-container.with-card-border {
+          border: 3px solid var(--card-border-colour);
         }
 
         .card {
@@ -176,12 +180,6 @@ class CompactLightCard extends HTMLElement {
           border-left: 2px solid rgba(255, 255, 255, 0.3);
           background: var(--light-primary-colour, var(--secondary-background-color));
           transition: background 0.3s ease;
-        }
-
-        .right-info.value-bar.with-card-border {
-          border-top: 3px solid var(--card-border-colour);
-          border-right: 3px solid var(--card-border-colour);
-          border-bottom: 3px solid var(--card-border-colour);
         }
 
         .percentage {
@@ -1081,15 +1079,16 @@ class CompactLightCard extends HTMLElement {
     const rightInfoEl = this.shadowRoot.querySelector(".right-info");
     if (this.config.show_value_bar) {
       rightInfoEl.classList.add("value-bar");
-      // Apply card border to value bar outer edges (not left divider)
-      if (this.config.card_border) {
-        rightInfoEl.classList.add("with-card-border");
-      } else {
-        rightInfoEl.classList.remove("with-card-border");
-      }
     } else {
       rightInfoEl.classList.remove("value-bar");
-      rightInfoEl.classList.remove("with-card-border");
+    }
+
+    // Apply card border to card-container
+    const cardContainer = this.shadowRoot.querySelector(".card-container");
+    if (this.config.card_border) {
+      cardContainer.classList.add("with-card-border");
+    } else {
+      cardContainer.classList.remove("with-card-border");
     }
 
     // Register mode button click handlers - only once
