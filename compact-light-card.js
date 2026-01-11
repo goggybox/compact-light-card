@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.47 loaded!");
+console.log("compact-light-card.js v0.6.48 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1719,7 +1719,7 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="section-title">Basic Settings</div>
           <div class="row">
             <label>Entity *</label>
-            <ha-entity-picker id="entity" allow-custom-entity></ha-entity-picker>
+            <ha-entity-picker id="entity"></ha-entity-picker>
           </div>
           <div class="row">
             <label>Name</label>
@@ -1952,17 +1952,19 @@ class CompactLightCardEditor extends HTMLElement {
   }
 
   _setupHaPickers() {
-    // Entity picker
+    // Entity picker - delay to ensure element is ready
     const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
     if (entityPicker) {
-      entityPicker.hass = this._hass;
-      entityPicker.value = this._config.entity || "";
-      entityPicker.includeDomains = ["light"];
-      entityPicker.allowCustomEntity = true;
-      entityPicker.addEventListener("value-changed", (e) => {
-        this._config.entity = e.detail.value;
-        this._fireConfigChanged();
-      });
+      setTimeout(() => {
+        entityPicker.hass = this._hass;
+        entityPicker.value = this._config.entity || "";
+        entityPicker.includeDomains = ["light"];
+        entityPicker.allowCustomEntity = true;
+        entityPicker.addEventListener("value-changed", (e) => {
+          this._config.entity = e.detail.value;
+          this._fireConfigChanged();
+        });
+      }, 0);
     }
 
     // Icon picker
