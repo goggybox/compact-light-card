@@ -9,7 +9,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.39 loaded!");
+console.log("compact-light-card.js v0.6.40 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -2136,7 +2136,7 @@ class CompactLightCardEditor extends HTMLElement {
     if (entityPicker) {
       entityPicker.hass = this._hass;
       entityPicker.value = this._config.entity || "";
-      entityPicker.includeDomains = ["light", "fan"];
+      entityPicker.includeDomains = ["light"];
       entityPicker.allowCustomEntity = true;
       entityPicker.addEventListener("value-changed", (e) => {
         this._config.entity = e.detail.value;
