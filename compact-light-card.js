@@ -9,7 +9,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.38 loaded!");
+console.log("compact-light-card.js v0.6.39 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1687,9 +1687,9 @@ class CompactLightCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // Update all entity pickers
-    const entityPickers = this.shadowRoot?.querySelectorAll("ha-entity-picker");
-    if (entityPickers) entityPickers.forEach(picker => picker.hass = hass);
+    // Update entity picker if it exists
+    const entityPicker = this.shadowRoot?.querySelector("ha-entity-picker");
+    if (entityPicker) entityPicker.hass = hass;
     const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
     if (iconPicker) iconPicker.hass = hass;
   }
@@ -1892,20 +1892,6 @@ class CompactLightCardEditor extends HTMLElement {
               .hass=${this._hass}
               .value=${this._config.icon || "mdi:lightbulb"}
             ></ha-icon-picker>
-          </div>
-          <div class="row">
-            <label>Secondary Entity</label>
-            <ha-entity-picker
-              id="secondary_entity"
-              .hass=${this._hass}
-              .value=${this._config.secondary_entity || ""}
-              .includeDomains=${["light"]}
-              allow-custom-entity
-            ></ha-entity-picker>
-          </div>
-          <div class="row">
-            <label>Show Secondary Icon</label>
-            <input type="checkbox" id="show_secondary_icon" ${this._config.show_secondary_icon !== false ? "checked" : ""}>
           </div>
         </div>
 
@@ -2154,23 +2140,6 @@ class CompactLightCardEditor extends HTMLElement {
       entityPicker.allowCustomEntity = true;
       entityPicker.addEventListener("value-changed", (e) => {
         this._config.entity = e.detail.value;
-        this._fireConfigChanged();
-      });
-    }
-
-    // Secondary entity picker
-    const secondaryPicker = this.shadowRoot.querySelector("#secondary_entity");
-    if (secondaryPicker) {
-      secondaryPicker.hass = this._hass;
-      secondaryPicker.value = this._config.secondary_entity || "";
-      secondaryPicker.includeDomains = ["light", "fan"];
-      secondaryPicker.allowCustomEntity = true;
-      secondaryPicker.addEventListener("value-changed", (e) => {
-        if (e.detail.value) {
-          this._config.secondary_entity = e.detail.value;
-        } else {
-          delete this._config.secondary_entity;
-        }
         this._fireConfigChanged();
       });
     }
