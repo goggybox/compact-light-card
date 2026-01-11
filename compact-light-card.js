@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.55 loaded!");
+console.log("compact-light-card.js v0.6.56 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -850,7 +850,7 @@ class CompactLightCard extends HTMLElement {
       this.style.setProperty("--card-border-colour", this.config.card_border_colour);
     } else {
       // reset to default
-      this.style.setProperty("--card-border-colour", "--var(--card-background-color");
+      this.style.setProperty("--card-border-colour", "var(--card-background-color)");
     }
 
     const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
@@ -1709,7 +1709,7 @@ class CompactLightCard extends HTMLElement {
     if (!secondaryIconEl) return;
 
     const secondaryEntity = this.config.secondary_entity;
-    const showSecondaryIcon = this.config.show_secondary_icon !== false;
+    const showSecondaryIcon = this.config.show_secondary_icon === true;
 
     // Hide if no secondary entity configured or explicitly hidden
     if (!secondaryEntity || !showSecondaryIcon) {
@@ -2433,11 +2433,19 @@ class CompactLightCardEditor extends HTMLElement {
     }
 
     // Handle special cases
-    if (id === "glow" || id === "smart_font_colour" || id === "show_secondary_icon" || id === "slider_turns_on") {
+    // These options default to true, so delete when true (only store false)
+    if (id === "glow" || id === "smart_font_colour" || id === "slider_turns_on") {
       if (value === true) {
         delete this._config[id];
       } else {
         this._config[id] = value;
+      }
+    } else if (id === "show_secondary_icon") {
+      // show_secondary_icon defaults to false, so delete when false (only store true)
+      if (value === true) {
+        this._config[id] = true;
+      } else {
+        delete this._config[id];
       }
     } else if (id === "slider_mode") {
       // slider_mode default is "absolute", only store if "relative"
