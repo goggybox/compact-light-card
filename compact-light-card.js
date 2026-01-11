@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.49 loaded!");
+console.log("compact-light-card.js v0.6.50 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1534,8 +1534,8 @@ class CompactLightCardEditor extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     // Update pickers if they exist
-    const entityPicker = this.shadowRoot?.querySelector("ha-entity-picker");
-    if (entityPicker) entityPicker.hass = hass;
+    const entitySelector = this.shadowRoot?.querySelector("ha-selector#entity");
+    if (entitySelector) entitySelector.hass = hass;
     const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
     if (iconPicker) iconPicker.hass = hass;
   }
@@ -1660,7 +1660,7 @@ class CompactLightCardEditor extends HTMLElement {
           color: var(--primary-text-color);
           font-size: 14px;
         }
-        ha-entity-picker, ha-icon-picker {
+        ha-selector, ha-icon-picker {
           flex: 1;
         }
         .opacity-control {
@@ -1719,7 +1719,7 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="section-title">Basic Settings</div>
           <div class="row">
             <label>Entity *</label>
-            <ha-entity-picker id="entity"></ha-entity-picker>
+            <ha-selector id="entity"></ha-selector>
           </div>
           <div class="row">
             <label>Name</label>
@@ -1952,18 +1952,16 @@ class CompactLightCardEditor extends HTMLElement {
   }
 
   _setupHaPickers() {
-    // Entity picker - delay to ensure element is ready
-    const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
-    if (entityPicker) {
-      setTimeout(() => {
-        entityPicker.hass = this._hass;
-        entityPicker.value = this._config.entity || "";
-        entityPicker.allowCustomEntity = true;
-        entityPicker.addEventListener("value-changed", (e) => {
-          this._config.entity = e.detail.value;
-          this._fireConfigChanged();
-        });
-      }, 0);
+    // Entity selector
+    const entitySelector = this.shadowRoot.querySelector("ha-selector#entity");
+    if (entitySelector) {
+      entitySelector.hass = this._hass;
+      entitySelector.selector = { entity: { domain: "light" } };
+      entitySelector.value = this._config.entity || "";
+      entitySelector.addEventListener("value-changed", (e) => {
+        this._config.entity = e.detail.value;
+        this._fireConfigChanged();
+      });
     }
 
     // Icon picker
