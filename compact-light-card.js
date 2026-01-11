@@ -9,7 +9,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.36 loaded!");
+console.log("compact-light-card.js v0.6.37 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -2137,41 +2137,43 @@ class CompactLightCardEditor extends HTMLElement {
       </div>
     `;
 
-    // Setup HA pickers after render (delay to allow custom elements to upgrade)
-    requestAnimationFrame(() => {
-      this._setupHaPickers();
-    });
+    // Setup HA pickers after render
+    this._setupHaPickers();
 
     // Add event listeners
     this._setupEventListeners();
   }
 
   _setupHaPickers() {
-    // Setup all entity pickers
-    const entityPickers = this.shadowRoot.querySelectorAll("ha-entity-picker");
-    entityPickers.forEach(picker => {
-      picker.hass = this._hass;
-      picker.includeDomains = ["light", "fan"];
-      picker.allowCustomEntity = true;
+    // Entity picker - set value property directly after render
+    const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
+    if (entityPicker) {
+      entityPicker.hass = this._hass;
+      entityPicker.value = this._config.entity || "";
+      entityPicker.includeDomains = ["light", "fan"];
+      entityPicker.allowCustomEntity = true;
+      entityPicker.addEventListener("value-changed", (e) => {
+        this._config.entity = e.detail.value;
+        this._fireConfigChanged();
+      });
+    }
 
-      if (picker.id === "entity") {
-        picker.value = this._config.entity || "";
-        picker.addEventListener("value-changed", (e) => {
-          this._config.entity = e.detail.value;
-          this._fireConfigChanged();
-        });
-      } else if (picker.id === "secondary_entity") {
-        picker.value = this._config.secondary_entity || "";
-        picker.addEventListener("value-changed", (e) => {
-          if (e.detail.value) {
-            this._config.secondary_entity = e.detail.value;
-          } else {
-            delete this._config.secondary_entity;
-          }
-          this._fireConfigChanged();
-        });
-      }
-    });
+    // Secondary entity picker
+    const secondaryPicker = this.shadowRoot.querySelector("#secondary_entity");
+    if (secondaryPicker) {
+      secondaryPicker.hass = this._hass;
+      secondaryPicker.value = this._config.secondary_entity || "";
+      secondaryPicker.includeDomains = ["light", "fan"];
+      secondaryPicker.allowCustomEntity = true;
+      secondaryPicker.addEventListener("value-changed", (e) => {
+        if (e.detail.value) {
+          this._config.secondary_entity = e.detail.value;
+        } else {
+          delete this._config.secondary_entity;
+        }
+        this._fireConfigChanged();
+      });
+    }
 
     // Icon picker - set value property directly after render
     const iconPicker = this.shadowRoot.querySelector("ha-icon-picker");
