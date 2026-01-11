@@ -9,7 +9,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.34 loaded!");
+console.log("compact-light-card.js v0.6.35 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -818,6 +818,7 @@ class CompactLightCard extends HTMLElement {
     this._hass = hass;
     const entity = this.config.entity;
     const stateObj = hass.states[entity];
+    if (!stateObj) return; // Entity not found, skip update
     const state = stateObj.state;
 
     // apply height and font size
