@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.52 loaded!");
+console.log("compact-light-card.js v0.6.53 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -28,6 +28,7 @@ class CompactLightCard extends HTMLElement {
     this._arrowListenerInitialized = false;
     this._modeButtonsInitialized = false;
     this._currentMode = "brightness"; // brightness, color_temp, rgb
+    this._controllingSecondary = false; // entity swap state
     this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -206,6 +207,16 @@ class CompactLightCard extends HTMLElement {
         .secondary-icon.on {
           opacity: 1;
           color: var(--light-primary-colour, var(--primary-color));
+        }
+
+        .secondary-icon.hidden {
+          display: none;
+        }
+
+        .secondary-icon.swapped {
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 50%;
+          padding: 2px;
         }
 
         .mode-buttons {
@@ -498,7 +509,10 @@ class CompactLightCard extends HTMLElement {
       };
     }
 
-    const entity = this.config.entity;
+    // Determine which entity to control based on swap state
+    const entity = this._controllingSecondary && this.config.secondary_entity
+      ? this.config.secondary_entity
+      : this.config.entity;
     const stateObj = this._hass.states[entity];
 
     // Detect if this is a fan entity
@@ -602,8 +616,16 @@ class CompactLightCard extends HTMLElement {
       secondaryColour = `linear-gradient(${gradientColour}, ${gradientColour}), var(--secondary-background-color)`;
     }
 
-    // determine icon
-    const icon = this.config.icon;
+    // determine icon - use entity-appropriate icon when controlling secondary
+    let icon = this.config.icon;
+    if (this._controllingSecondary) {
+      // Use appropriate icon for the secondary entity type
+      if (this.isFanEntity) {
+        icon = stateObj.attributes.icon || "mdi:fan";
+      } else {
+        icon = stateObj.attributes.icon || "mdi:lightbulb";
+      }
+    }
 
     return {
       name: friendlyName,
@@ -845,11 +867,15 @@ class CompactLightCard extends HTMLElement {
       iconEl.addEventListener("click", (ev) => {
         ev.stopPropagation();
 
-        const entityId = this.config.entity;
+        // Use the currently controlled entity (primary or secondary if swapped)
+        const entityId = this._controllingSecondary && this.config.secondary_entity
+          ? this.config.secondary_entity
+          : this.config.entity;
         const stateObj = this._hass.states[entityId];
         if (!stateObj) return;
 
-        const domain = this.isFanEntity ? "fan" : "light";
+        const isFan = entityId.startsWith("fan.");
+        const domain = isFan ? "fan" : "light";
 
         // toggle entity
         if (stateObj.state == "on") {
@@ -857,7 +883,7 @@ class CompactLightCard extends HTMLElement {
         } else {
           // turn on - use configured brightness/percentage if icon_tap_to_brightness is enabled
           if (this.config.icon_tap_to_brightness) {
-            if (this.isFanEntity) {
+            if (isFan) {
               this._hass.callService("fan", "turn_on", {
                 entity_id: entityId,
                 percentage: this.config.turn_on_brightness
@@ -885,8 +911,30 @@ class CompactLightCard extends HTMLElement {
           const secondaryEntity = this.config.secondary_entity;
           if (!secondaryEntity || !this._hass.states[secondaryEntity]) return;
 
-          const domain = secondaryEntity.split(".")[0];
-          this._hass.callService(domain, "toggle", { entity_id: secondaryEntity });
+          // Check if the secondary entity supports more than on/off (has brightness/percentage/color)
+          const secondaryStateObj = this._hass.states[secondaryEntity];
+          const isSecondaryFan = secondaryEntity.startsWith("fan.");
+          const hasAdvancedControls = isSecondaryFan
+            ? (secondaryStateObj.attributes.percentage !== undefined || (secondaryStateObj.attributes.supported_features & 1))
+            : ((secondaryStateObj.attributes.supported_features & 1) ||
+               secondaryStateObj.attributes.brightness !== undefined ||
+               (secondaryStateObj.attributes.supported_color_modes || []).some(mode =>
+                 ["color_temp", "rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode)));
+
+          if (hasAdvancedControls) {
+            // Swap control to the other entity
+            this._controllingSecondary = !this._controllingSecondary;
+            // Reset mode to brightness when swapping
+            this._currentMode = "brightness";
+            // Force a refresh of the card
+            this._refreshCard();
+            // Update secondary icon
+            this._updateSecondaryIcon();
+          } else {
+            // Simple toggle for on/off only entities
+            const domain = secondaryEntity.split(".")[0];
+            this._hass.callService(domain, "toggle", { entity_id: secondaryEntity });
+          }
         });
         this._secondaryIconListenerInitialized = true;
       }
@@ -1037,7 +1085,12 @@ class CompactLightCard extends HTMLElement {
           markerEl.classList.add("visible");
         } else {
           // Brightness mode: restore normal bar behavior
-          brightnessEl.style.background = "";
+          const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+            ? this.config.secondary_entity
+            : this.config.entity;
+          const stateObj = this._hass.states[controlledEntity];
+          const isOn = stateObj && stateObj.state === "on";
+          brightnessEl.style.background = isOn ? "var(--light-secondary-colour)" : "var(--off-background-colour)";
           barEl.style.display = "";
           barEl.style.background = "var(--light-primary-colour)";
           markerEl.classList.remove("visible");
@@ -1069,7 +1122,10 @@ class CompactLightCard extends HTMLElement {
       const percentageEl = this.shadowRoot.querySelector(".percentage");
       const markerEl = this.shadowRoot.querySelector(".color-marker");
       const rightInfoEl = this.shadowRoot.querySelector(".right-info");
-      const stateObj = this._hass.states[this.config.entity];
+      const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+        ? this.config.secondary_entity
+        : this.config.entity;
+      const stateObj = this._hass.states[controlledEntity];
 
       if (!stateObj || stateObj.state !== "on") return;
 
@@ -1252,10 +1308,17 @@ class CompactLightCard extends HTMLElement {
 
     // shared drag start logic
     const onDragStart = (clientX) => {
+      // Get the currently controlled entity
+      const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+        ? this.config.secondary_entity
+        : this.config.entity;
+      const controlledStateObj = this._hass.states[controlledEntity];
+      const controlledState = controlledStateObj ? controlledStateObj.state : "unavailable";
+
       // For non-dimmable entities (no brightness, color temp, or RGB support), toggle on click
       if (!this.supportsBrightness && !this.supportsColorTemp && !this.supportsRgb) {
         const domain = this.isFanEntity ? "fan" : "light";
-        hass.callService(domain, "toggle", { entity_id: this.config.entity });
+        hass.callService(domain, "toggle", { entity_id: controlledEntity });
         return;
       }
 
@@ -1294,30 +1357,30 @@ class CompactLightCard extends HTMLElement {
 
       // Turn on entity if it's off (unless slider_turns_on is false)
       const sliderTurnsOn = this.config.slider_turns_on !== false;
-      if (state !== "on" && sliderTurnsOn) {
+      if (controlledState !== "on" && sliderTurnsOn) {
         const value = this.startWidth;
         if (this._currentMode === "brightness") {
           if (this.isFanEntity) {
             hass.callService("fan", "turn_on", {
-              entity_id: this.config.entity,
+              entity_id: controlledEntity,
               percentage: Math.max(1, Math.round(value))
             });
           } else {
             const brightness255 = Math.round((value / 100) * 255);
             hass.callService("light", "turn_on", {
-              entity_id: this.config.entity,
+              entity_id: controlledEntity,
               brightness: Math.max(1, brightness255)
             });
           }
         } else if (this._currentMode === "color_temp") {
           const mireds = Math.round(this.minMireds + ((100 - value) / 100) * (this.maxMireds - this.minMireds));
           hass.callService("light", "turn_on", {
-            entity_id: this.config.entity,
+            entity_id: controlledEntity,
             color_temp: mireds
           });
         } else if (this._currentMode === "rgb") {
           hass.callService("light", "turn_on", {
-            entity_id: this.config.entity,
+            entity_id: controlledEntity,
             hs_color: [value, 100]
           });
         }
@@ -1359,7 +1422,11 @@ class CompactLightCard extends HTMLElement {
       this.isDragging = false;
       document.body.style.userSelect = "";
       clearTimeout(updateTimeout);
-      applyValue(hass, entity, currentValue);
+      // Use the currently controlled entity
+      const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+        ? this.config.secondary_entity
+        : this.config.entity;
+      applyValue(hass, controlledEntity, currentValue);
 
       // re-enable transition for smooth state updates
       if (barEl.style.transition === "none") {
@@ -1623,7 +1690,12 @@ class CompactLightCard extends HTMLElement {
       return;
     }
 
-    const stateObj = this._hass.states[secondaryEntity];
+    // When swapped, show the primary entity icon; otherwise show secondary entity icon
+    const entityToShow = this._controllingSecondary
+      ? this.config.entity
+      : secondaryEntity;
+
+    const stateObj = this._hass.states[entityToShow];
     if (!stateObj) {
       secondaryIconEl.classList.add("hidden");
       return;
@@ -1633,10 +1705,11 @@ class CompactLightCard extends HTMLElement {
     secondaryIconEl.classList.remove("hidden");
 
     // Set appropriate icon based on entity type
-    const domain = secondaryEntity.split(".")[0];
+    const domain = entityToShow.split(".")[0];
     let icon = "mdi:fan";
-    if (domain === "light") icon = "mdi:lightbulb";
-    else if (domain === "switch") icon = "mdi:power";
+    if (domain === "light") icon = stateObj.attributes.icon || "mdi:lightbulb";
+    else if (domain === "switch") icon = stateObj.attributes.icon || "mdi:power";
+    else if (domain === "fan") icon = stateObj.attributes.icon || "mdi:fan";
     secondaryIconEl.setAttribute("icon", icon);
 
     // Update on/off state
@@ -1644,6 +1717,13 @@ class CompactLightCard extends HTMLElement {
       secondaryIconEl.classList.add("on");
     } else {
       secondaryIconEl.classList.remove("on");
+    }
+
+    // Show swapped indicator when controlling secondary entity
+    if (this._controllingSecondary) {
+      secondaryIconEl.classList.add("swapped");
+    } else {
+      secondaryIconEl.classList.remove("swapped");
     }
   }
 
