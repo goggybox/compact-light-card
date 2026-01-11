@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.45 loaded!");
+console.log("compact-light-card.js v0.6.46 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1533,11 +1533,6 @@ class CompactLightCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // Update entity picker if it exists
-    const entityPicker = this.shadowRoot?.querySelector("#entity-picker-container ha-entity-picker");
-    if (entityPicker) entityPicker.hass = hass;
-    const iconPicker = this.shadowRoot?.querySelector("#icon-picker-container ha-icon-picker");
-    if (iconPicker) iconPicker.hass = hass;
   }
 
   setConfig(config) {
@@ -1660,13 +1655,6 @@ class CompactLightCardEditor extends HTMLElement {
           color: var(--primary-text-color);
           font-size: 14px;
         }
-        #entity-picker-container, #icon-picker-container {
-          flex: 1;
-        }
-        #entity-picker-container ha-entity-picker,
-        #icon-picker-container ha-icon-picker {
-          width: 100%;
-        }
         .opacity-control {
           flex: 1;
           display: flex;
@@ -1723,7 +1711,7 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="section-title">Basic Settings</div>
           <div class="row">
             <label>Entity *</label>
-            <div id="entity-picker-container"></div>
+            <input type="text" id="entity" value="${this._config.entity || ""}" placeholder="light.living_room">
           </div>
           <div class="row">
             <label>Name</label>
@@ -1731,7 +1719,7 @@ class CompactLightCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Icon</label>
-            <div id="icon-picker-container"></div>
+            <input type="text" id="icon" value="${this._config.icon || ""}" placeholder="mdi:lightbulb">
           </div>
         </div>
 
@@ -1948,52 +1936,34 @@ class CompactLightCardEditor extends HTMLElement {
       </div>
     `;
 
-    // Setup HA pickers after render
-    this._setupHaPickers();
-
     // Add event listeners
     this._setupEventListeners();
   }
 
-  async _setupHaPickers() {
-    // Wait for custom elements to be defined
-    await customElements.whenDefined("ha-entity-picker");
-    await customElements.whenDefined("ha-icon-picker");
-
-    // Create entity picker dynamically
-    const entityContainer = this.shadowRoot.querySelector("#entity-picker-container");
-    if (entityContainer && !entityContainer.querySelector("ha-entity-picker")) {
-      const entityPicker = document.createElement("ha-entity-picker");
-      entityPicker.hass = this._hass;
-      entityPicker.value = this._config.entity || "";
-      entityPicker.includeDomains = ["light"];
-      entityPicker.allowCustomEntity = true;
-      entityPicker.addEventListener("value-changed", (e) => {
-        this._config.entity = e.detail.value;
+  _setupEventListeners() {
+    // Entity input
+    const entityInput = this.shadowRoot.getElementById("entity");
+    if (entityInput) {
+      entityInput.addEventListener("change", (e) => {
+        this._config.entity = e.target.value;
         this._fireConfigChanged();
       });
-      entityContainer.appendChild(entityPicker);
     }
 
-    // Create icon picker dynamically
-    const iconContainer = this.shadowRoot.querySelector("#icon-picker-container");
-    if (iconContainer && !iconContainer.querySelector("ha-icon-picker")) {
-      const iconPicker = document.createElement("ha-icon-picker");
-      iconPicker.hass = this._hass;
-      iconPicker.value = this._config.icon || "mdi:lightbulb";
-      iconPicker.addEventListener("value-changed", (e) => {
-        if (e.detail.value) {
-          this._config.icon = e.detail.value;
+    // Icon input
+    const iconInput = this.shadowRoot.getElementById("icon");
+    if (iconInput) {
+      iconInput.addEventListener("change", (e) => {
+        if (e.target.value) {
+          this._config.icon = e.target.value;
         } else {
           delete this._config.icon;
         }
         this._fireConfigChanged();
       });
-      iconContainer.appendChild(iconPicker);
     }
-  }
 
-  _setupEventListeners() {
+
     // Color picker and text input pairs
     const colorPairs = [
       ["primary_colour_picker", "primary_colour"],
