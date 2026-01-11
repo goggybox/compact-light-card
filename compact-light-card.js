@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.53 loaded!");
+console.log("compact-light-card.js v0.6.54 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -422,6 +422,9 @@ class CompactLightCard extends HTMLElement {
       show_color_temp_button: config.show_color_temp_button !== false, // default true if supported
       show_rgb_button: config.show_rgb_button !== false, // default true if supported
       show_value_bar: config.show_value_bar === true, // default false - solid background behind buttons
+      secondary_entity: config.secondary_entity || null,
+      show_secondary_icon: config.show_secondary_icon === true, // default false
+      secondary_icon_action: config.secondary_icon_action || "toggle", // "toggle" or "swap"
     };
 
     // validate off_colours structure
@@ -911,29 +914,40 @@ class CompactLightCard extends HTMLElement {
           const secondaryEntity = this.config.secondary_entity;
           if (!secondaryEntity || !this._hass.states[secondaryEntity]) return;
 
-          // Check if the secondary entity supports more than on/off (has brightness/percentage/color)
-          const secondaryStateObj = this._hass.states[secondaryEntity];
-          const isSecondaryFan = secondaryEntity.startsWith("fan.");
-          const hasAdvancedControls = isSecondaryFan
-            ? (secondaryStateObj.attributes.percentage !== undefined || (secondaryStateObj.attributes.supported_features & 1))
-            : ((secondaryStateObj.attributes.supported_features & 1) ||
-               secondaryStateObj.attributes.brightness !== undefined ||
-               (secondaryStateObj.attributes.supported_color_modes || []).some(mode =>
-                 ["color_temp", "rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode)));
+          const iconAction = this.config.secondary_icon_action || "toggle";
 
-          if (hasAdvancedControls) {
-            // Swap control to the other entity
-            this._controllingSecondary = !this._controllingSecondary;
-            // Reset mode to brightness when swapping
-            this._currentMode = "brightness";
-            // Force a refresh of the card
-            this._refreshCard();
-            // Update secondary icon
-            this._updateSecondaryIcon();
+          if (iconAction === "swap") {
+            // Check if the secondary entity supports more than on/off (has brightness/percentage/color)
+            const secondaryStateObj = this._hass.states[secondaryEntity];
+            const isSecondaryFan = secondaryEntity.startsWith("fan.");
+            const hasAdvancedControls = isSecondaryFan
+              ? (secondaryStateObj.attributes.percentage !== undefined || (secondaryStateObj.attributes.supported_features & 1))
+              : ((secondaryStateObj.attributes.supported_features & 1) ||
+                 secondaryStateObj.attributes.brightness !== undefined ||
+                 (secondaryStateObj.attributes.supported_color_modes || []).some(mode =>
+                   ["color_temp", "rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode)));
+
+            if (hasAdvancedControls) {
+              // Swap control to the other entity
+              this._controllingSecondary = !this._controllingSecondary;
+              // Reset mode to brightness when swapping
+              this._currentMode = "brightness";
+              // Force a refresh of the card
+              this._refreshCard();
+              // Update secondary icon
+              this._updateSecondaryIcon();
+            } else {
+              // Fall back to toggle for on/off only entities
+              const domain = secondaryEntity.split(".")[0];
+              this._hass.callService(domain, "toggle", { entity_id: secondaryEntity });
+            }
           } else {
-            // Simple toggle for on/off only entities
-            const domain = secondaryEntity.split(".")[0];
-            this._hass.callService(domain, "toggle", { entity_id: secondaryEntity });
+            // "toggle" action - simple toggle without swap
+            const entityToToggle = this._controllingSecondary
+              ? this.config.entity  // Toggle primary when swapped
+              : secondaryEntity;    // Toggle secondary normally
+            const domain = entityToToggle.split(".")[0];
+            this._hass.callService(domain, "toggle", { entity_id: entityToToggle });
           }
         });
         this._secondaryIconListenerInitialized = true;
@@ -1706,10 +1720,17 @@ class CompactLightCard extends HTMLElement {
 
     // Set appropriate icon based on entity type
     const domain = entityToShow.split(".")[0];
-    let icon = "mdi:fan";
-    if (domain === "light") icon = stateObj.attributes.icon || "mdi:lightbulb";
-    else if (domain === "switch") icon = stateObj.attributes.icon || "mdi:power";
-    else if (domain === "fan") icon = stateObj.attributes.icon || "mdi:fan";
+    let icon;
+    if (this._controllingSecondary) {
+      // When swapped, show the configured primary icon
+      icon = this.config.icon || stateObj.attributes.icon || "mdi:lightbulb";
+    } else {
+      // Show secondary entity icon based on its type
+      if (domain === "light") icon = stateObj.attributes.icon || "mdi:lightbulb";
+      else if (domain === "switch") icon = stateObj.attributes.icon || "mdi:power";
+      else if (domain === "fan") icon = stateObj.attributes.icon || "mdi:fan";
+      else icon = stateObj.attributes.icon || "mdi:lightbulb";
+    }
     secondaryIconEl.setAttribute("icon", icon);
 
     // Update on/off state
@@ -1947,7 +1968,14 @@ class CompactLightCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Show Secondary Icon</label>
-            <input type="checkbox" id="show_secondary_icon" ${this._config.show_secondary_icon !== false ? "checked" : ""}>
+            <input type="checkbox" id="show_secondary_icon" ${this._config.show_secondary_icon === true ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Secondary Icon Action</label>
+            <select id="secondary_icon_action">
+              <option value="toggle" ${(this._config.secondary_icon_action || "toggle") === "toggle" ? "selected" : ""}>Toggle On/Off</option>
+              <option value="swap" ${this._config.secondary_icon_action === "swap" ? "selected" : ""}>Swap Controls</option>
+            </select>
           </div>
         </div>
 
