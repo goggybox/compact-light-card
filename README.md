@@ -12,9 +12,11 @@ A clean, compact, and highly customisable light card for Home Assistant.
 
 ## Features
 - Click and drag to increase/decrease the brightness of a dimmable bulb.
+- **Fan Support**: Also works with fan entities - slider controls fan speed (0-100%).
 - The card takes the same colour as the light, or a default orange colour for bulbs that don't support colour changing (as seen with the "Salt Lamp" in the image below). The primary and secondary colour of the card can be customised.
-- Click on the light's icon to toggle the light on/off.
+- Click on the light's icon to toggle the light on/off (or fan on/off).
 - Click on the chevron to open the "More Info" page for the light. This behaviour can be customised.
+- For on/off only devices (no brightness or speed control), click anywhere on the slider to toggle.
 
 ## Customisation
 ![Image 2](img/img2.png)

@@ -9,7 +9,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.29 loaded!");
+console.log("compact-light-card.js v0.6.30 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -22,6 +22,8 @@ class CompactLightCard extends HTMLElement {
     this.supportsBrightness = true;
     this.supportsColorTemp = false;
     this.supportsRgb = false;
+    this.supportsSpeed = false;
+    this.isFan = false;
     this.pendingUpdate = null;
     this._hass = null;
     this._listenersInitialized = false;
@@ -362,9 +364,16 @@ class CompactLightCard extends HTMLElement {
       throw new Error("Compact Light Card: Please provide an 'entity' in the config.")
     }
 
+    // Detect if entity is a fan
+    const entityDomain = config.entity.split(".")[0];
+    this.isFan = entityDomain === "fan";
+
+    // Set appropriate default icon based on entity type
+    const defaultIcon = this.isFan ? "mdi:fan" : "mdi:lightbulb";
+
     this.config = {
       ...config,
-      icon: config.icon || "mdi:lightbulb",
+      icon: config.icon || defaultIcon,
       name: config.name,
       glow: config.glow !== false,
       icon_border: config.icon_border === true,
@@ -500,29 +509,56 @@ class CompactLightCard extends HTMLElement {
     }
 
     const state = stateObj.state;
-    const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace("light.", "");
+    const entityDomain = entity.split(".")[0];
+    const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace(/^(light|fan)\./, "");
     const friendlyName = tempName.length > 30 ? tempName.slice(0, 30) + "..." : tempName;
-    this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);
 
-    // detect color capabilities
-    const colorModes = stateObj.attributes.supported_color_modes || [];
-    this.supportsColorTemp = colorModes.includes("color_temp");
-    this.supportsRgb = colorModes.some(mode => ["rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode));
+    // Handle fan entities
+    if (this.isFan) {
+      // Fan speed support (supported_features & 1 = SET_SPEED)
+      this.supportsSpeed = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.percentage !== undefined);
+      this.supportsBrightness = false; // Fans don't have brightness
+      this.supportsColorTemp = false;
+      this.supportsRgb = false;
+    } else {
+      // Light brightness support
+      this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);
+      this.supportsSpeed = false;
 
-    // get color temp range
+      // detect color capabilities for lights
+      const colorModes = stateObj.attributes.supported_color_modes || [];
+      this.supportsColorTemp = colorModes.includes("color_temp");
+      this.supportsRgb = colorModes.some(mode => ["rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode));
+    }
+
+    // get color temp range (lights only)
     this.minMireds = stateObj.attributes.min_mireds || 153;
     this.maxMireds = stateObj.attributes.max_mireds || 500;
 
-    // determine brightness and display text
+    // determine brightness/speed and display text
     let brightnessPercent = 0;
     let displayText = "Off";
     if (state == "on") {
-      const brightness = stateObj.attributes.brightness || 255;
-      brightnessPercent = Math.round((brightness / 255) * 100);
-      if (this.supportsBrightness) { displayText = `${brightnessPercent}` }
-      else {
-        displayText = "On";
-        brightnessPercent = 100;
+      if (this.isFan) {
+        // Fan uses percentage attribute
+        const percentage = stateObj.attributes.percentage || 0;
+        brightnessPercent = percentage;
+        if (this.supportsSpeed && percentage > 0) {
+          displayText = `${percentage}`;
+        } else {
+          displayText = "On";
+          brightnessPercent = 100;
+        }
+      } else {
+        // Light uses brightness attribute
+        const brightness = stateObj.attributes.brightness || 255;
+        brightnessPercent = Math.round((brightness / 255) * 100);
+        if (this.supportsBrightness) {
+          displayText = `${brightnessPercent}`;
+        } else {
+          displayText = "On";
+          brightnessPercent = 100;
+        }
       }
     } else if (state == "unavailable") {
       displayText = "Unavailable";
@@ -683,7 +719,7 @@ class CompactLightCard extends HTMLElement {
         break;
 
       case "toggle":
-        this._hass.callService("light", "toggle", {
+        this._hass.callService(this.isFan ? "fan" : "light", "toggle", {
           entity_id: entityId
         });
         break;
@@ -811,21 +847,27 @@ class CompactLightCard extends HTMLElement {
         const stateObj = this._hass.states[entityId];
         if (!stateObj) return;
 
-        // toggle light
+        const domain = this.isFan ? "fan" : "light";
+
+        // toggle device
         if (stateObj.state == "on") {
-          this._hass.callService("light", "turn_off", { entity_id: entityId });
+          this._hass.callService(domain, "turn_off", { entity_id: entityId });
         } else {
-          // turn on - use configured brightness if icon_tap_to_brightness is enabled
-          console.log("compact-light-card: icon_tap_to_brightness =", this.config.icon_tap_to_brightness, "turn_on_brightness =", this.config.turn_on_brightness);
+          // turn on - use configured brightness/speed if icon_tap_to_brightness is enabled
           if (this.config.icon_tap_to_brightness) {
-            console.log("compact-light-card: Turning on with brightness_pct:", this.config.turn_on_brightness);
-            this._hass.callService("light", "turn_on", {
-              entity_id: entityId,
-              brightness_pct: this.config.turn_on_brightness
-            });
+            if (this.isFan) {
+              this._hass.callService("fan", "turn_on", {
+                entity_id: entityId,
+                percentage: this.config.turn_on_brightness
+              });
+            } else {
+              this._hass.callService("light", "turn_on", {
+                entity_id: entityId,
+                brightness_pct: this.config.turn_on_brightness
+              });
+            }
           } else {
-            console.log("compact-light-card: Turning on without brightness (feature disabled)");
-            this._hass.callService("light", "turn_on", { entity_id: entityId });
+            this._hass.callService(domain, "turn_on", { entity_id: entityId });
           }
         }
       });
@@ -1167,12 +1209,21 @@ class CompactLightCard extends HTMLElement {
               hs_color: [v, 100] // hue, saturation at 100%
             });
             break;
-          default: // brightness
-            const brightness255 = Math.round((v / 100) * 255);
-            hass.callService("light", "turn_on", {
-              entity_id: entityId,
-              brightness: Math.max(0, Math.min(255, brightness255))
-            });
+          default: // brightness/speed
+            if (this.isFan) {
+              // Fan uses percentage via fan.set_percentage
+              hass.callService("fan", "set_percentage", {
+                entity_id: entityId,
+                percentage: Math.max(0, Math.min(100, Math.round(v)))
+              });
+            } else {
+              // Light uses brightness
+              const brightness255 = Math.round((v / 100) * 255);
+              hass.callService("light", "turn_on", {
+                entity_id: entityId,
+                brightness: Math.max(0, Math.min(255, brightness255))
+              });
+            }
         }
       }, 125);
     };
@@ -1185,16 +1236,16 @@ class CompactLightCard extends HTMLElement {
 
     // shared drag start logic
     const onDragStart = (clientX) => {
-      // For on/off only lights (no brightness, color temp, or RGB), toggle on click
-      if (!this.supportsBrightness && !this.supportsColorTemp && !this.supportsRgb) {
-        hass.callService("light", "toggle", {
+      // For on/off only devices (no brightness, speed, color temp, or RGB), toggle on click
+      if (!this.supportsBrightness && !this.supportsSpeed && !this.supportsColorTemp && !this.supportsRgb) {
+        hass.callService(this.isFan ? "fan" : "light", "toggle", {
           entity_id: this.config.entity
         });
         return;
       }
 
-      // For brightness mode, check if brightness is supported
-      if (this._currentMode === "brightness" && !this.supportsBrightness) {
+      // For brightness mode, check if brightness or speed is supported
+      if (this._currentMode === "brightness" && !this.supportsBrightness && !this.supportsSpeed) {
         return;
       }
       // For color_temp mode, check if color temp is supported
@@ -1217,14 +1268,23 @@ class CompactLightCard extends HTMLElement {
       updateBarPreview(value);
       currentValue = value;
 
-      // Turn on light if it's off
+      // Turn on device if it's off
       if (state !== "on") {
         if (this._currentMode === "brightness") {
-          const brightness255 = Math.round((value / 100) * 255);
-          hass.callService("light", "turn_on", {
-            entity_id: this.config.entity,
-            brightness: Math.max(1, brightness255)
-          });
+          if (this.isFan) {
+            // Fan uses percentage
+            hass.callService("fan", "turn_on", {
+              entity_id: this.config.entity,
+              percentage: Math.max(1, value)
+            });
+          } else {
+            // Light uses brightness
+            const brightness255 = Math.round((value / 100) * 255);
+            hass.callService("light", "turn_on", {
+              entity_id: this.config.entity,
+              brightness: Math.max(1, brightness255)
+            });
+          }
         } else if (this._currentMode === "color_temp") {
           const mireds = Math.round(this.minMireds + ((100 - value) / 100) * (this.maxMireds - this.minMireds));
           hass.callService("light", "turn_on", {
