@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.58 loaded!");
+console.log("compact-light-card.js v0.6.59 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -54,10 +54,6 @@ class CompactLightCard extends HTMLElement {
           margin: 0;
           overflow: hidden;
           box-sizing: border-box;
-        }
-
-        .card-container.with-card-border {
-          border: 3px solid var(--card-border-colour);
         }
 
         .card {
@@ -113,6 +109,10 @@ class CompactLightCard extends HTMLElement {
 
         .content.no-border {
           padding: 0px 0px 0px 5px;
+        }
+
+        .content.with-card-border {
+          background: var(--card-border-colour);
         }
 
         .brightness {
@@ -180,6 +180,13 @@ class CompactLightCard extends HTMLElement {
           border-left: 2px solid rgba(255, 255, 255, 0.3);
           background: var(--light-primary-colour, var(--secondary-background-color));
           transition: background 0.3s ease;
+        }
+
+        .right-info.value-bar.with-card-border {
+          border-top: 3px solid var(--card-border-colour);
+          border-right: 3px solid var(--card-border-colour);
+          border-bottom: 3px solid var(--card-border-colour);
+          margin-right: -3px;
         }
 
         .percentage {
@@ -1079,16 +1086,15 @@ class CompactLightCard extends HTMLElement {
     const rightInfoEl = this.shadowRoot.querySelector(".right-info");
     if (this.config.show_value_bar) {
       rightInfoEl.classList.add("value-bar");
+      // Apply card border to value bar outer edges (not left divider)
+      if (this.config.card_border) {
+        rightInfoEl.classList.add("with-card-border");
+      } else {
+        rightInfoEl.classList.remove("with-card-border");
+      }
     } else {
       rightInfoEl.classList.remove("value-bar");
-    }
-
-    // Apply card border to card-container
-    const cardContainer = this.shadowRoot.querySelector(".card-container");
-    if (this.config.card_border) {
-      cardContainer.classList.add("with-card-border");
-    } else {
-      cardContainer.classList.remove("with-card-border");
+      rightInfoEl.classList.remove("with-card-border");
     }
 
     // Register mode button click handlers - only once
@@ -1571,11 +1577,13 @@ class CompactLightCard extends HTMLElement {
       iconEl.classList.remove("no-border");
     }
     // add or remove border from card
-    // to do this, remove the padding front .content, and from .icon-background
+    // to do this, remove the padding from .content, and use card-border-colour for background
     if (!this.config.card_border) {
       contentEl.classList.add("no-border");
+      contentEl.classList.remove("with-card-border");
     } else {
       contentEl.classList.remove("no-border");
+      contentEl.classList.add("with-card-border");
     }
     // add glow effect if enabled and light is on
     const cardContainer = root.querySelector(".card-container");
