@@ -3,13 +3,12 @@
  *
  * A clean, compact, and highly customisable light card for Home Assistant.
  *
- * Original Author: goggybox
- * Modified by: lewisburgess
+ * Author: goggybox
  * License: MIT
  */
 
 
-console.log("compact-light-card.js v0.6.41 loaded!");
+console.log("compact-light-card.js v0.6.42 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1185,14 +1184,6 @@ class CompactLightCard extends HTMLElement {
 
     // shared drag start logic
     const onDragStart = (clientX) => {
-      // For on/off only lights (no brightness, color temp, or RGB), toggle on click
-      if (!this.supportsBrightness && !this.supportsColorTemp && !this.supportsRgb) {
-        hass.callService("light", "toggle", {
-          entity_id: this.config.entity
-        });
-        return;
-      }
-
       // For brightness mode, check if brightness is supported
       if (this._currentMode === "brightness" && !this.supportsBrightness) {
         return;
