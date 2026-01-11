@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.48 loaded!");
+console.log("compact-light-card.js v0.6.49 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1958,7 +1958,6 @@ class CompactLightCardEditor extends HTMLElement {
       setTimeout(() => {
         entityPicker.hass = this._hass;
         entityPicker.value = this._config.entity || "";
-        entityPicker.includeDomains = ["light"];
         entityPicker.allowCustomEntity = true;
         entityPicker.addEventListener("value-changed", (e) => {
           this._config.entity = e.detail.value;
