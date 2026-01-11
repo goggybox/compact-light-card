@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.56 loaded!");
+console.log("compact-light-card.js v0.6.57 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -212,7 +212,7 @@ class CompactLightCard extends HTMLElement {
 
         .secondary-icon.on {
           opacity: 1;
-          color: var(--light-primary-colour, var(--primary-color));
+          color: var(--primary-color, #03a9f4);
         }
 
         .secondary-icon.hidden {
@@ -846,10 +846,15 @@ class CompactLightCard extends HTMLElement {
     }
 
     // apply card border colour
-    if (this.config.card_border_colour && this.config.card_border === true) {
-      this.style.setProperty("--card-border-colour", this.config.card_border_colour);
+    if (this.config.card_border === true) {
+      if (this.config.card_border_colour) {
+        this.style.setProperty("--card-border-colour", this.config.card_border_colour);
+      } else {
+        // Use a visible default when card_border enabled but no color specified
+        this.style.setProperty("--card-border-colour", "var(--divider-color, rgba(0, 0, 0, 0.12))");
+      }
     } else {
-      // reset to default
+      // reset to default (invisible)
       this.style.setProperty("--card-border-colour", "var(--card-background-color)");
     }
 
