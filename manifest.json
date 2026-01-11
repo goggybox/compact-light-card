@@ -2,7 +2,7 @@
   "domain": "compact_light_card",
   "name": "Compact Light Card",
   "documentation": "https://github.com/lewisburgess/compact-light-card",
-  "version": "0.6.42",
+  "version": "0.6.43",
   "dependencies": [],
   "codeowners": ["@lewisburgess"],
   "requirements": []

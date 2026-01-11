@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.42 loaded!");
+console.log("compact-light-card.js v0.6.43 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1721,9 +1721,6 @@ class CompactLightCardEditor extends HTMLElement {
             <label>Entity *</label>
             <ha-entity-picker
               id="entity"
-              .hass=${this._hass}
-              .value=${this._config.entity || ""}
-              .includeDomains=${["light"]}
               allow-custom-entity
             ></ha-entity-picker>
           </div>
@@ -1735,8 +1732,6 @@ class CompactLightCardEditor extends HTMLElement {
             <label>Icon</label>
             <ha-icon-picker
               id="icon"
-              .hass=${this._hass}
-              .value=${this._config.icon || "mdi:lightbulb"}
             ></ha-icon-picker>
           </div>
         </div>
