@@ -8,7 +8,7 @@
  */
 
 
-console.log("compact-light-card.js v0.6.46 loaded!");
+console.log("compact-light-card.js v0.6.47 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -1533,6 +1533,11 @@ class CompactLightCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // Update pickers if they exist
+    const entityPicker = this.shadowRoot?.querySelector("ha-entity-picker");
+    if (entityPicker) entityPicker.hass = hass;
+    const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
+    if (iconPicker) iconPicker.hass = hass;
   }
 
   setConfig(config) {
@@ -1655,6 +1660,9 @@ class CompactLightCardEditor extends HTMLElement {
           color: var(--primary-text-color);
           font-size: 14px;
         }
+        ha-entity-picker, ha-icon-picker {
+          flex: 1;
+        }
         .opacity-control {
           flex: 1;
           display: flex;
@@ -1711,7 +1719,7 @@ class CompactLightCardEditor extends HTMLElement {
           <div class="section-title">Basic Settings</div>
           <div class="row">
             <label>Entity *</label>
-            <input type="text" id="entity" value="${this._config.entity || ""}" placeholder="light.living_room">
+            <ha-entity-picker id="entity" allow-custom-entity></ha-entity-picker>
           </div>
           <div class="row">
             <label>Name</label>
@@ -1719,7 +1727,7 @@ class CompactLightCardEditor extends HTMLElement {
           </div>
           <div class="row">
             <label>Icon</label>
-            <input type="text" id="icon" value="${this._config.icon || ""}" placeholder="mdi:lightbulb">
+            <ha-icon-picker id="icon"></ha-icon-picker>
           </div>
         </div>
 
@@ -1936,34 +1944,44 @@ class CompactLightCardEditor extends HTMLElement {
       </div>
     `;
 
+    // Setup HA pickers
+    this._setupHaPickers();
+
     // Add event listeners
     this._setupEventListeners();
   }
 
-  _setupEventListeners() {
-    // Entity input
-    const entityInput = this.shadowRoot.getElementById("entity");
-    if (entityInput) {
-      entityInput.addEventListener("change", (e) => {
-        this._config.entity = e.target.value;
+  _setupHaPickers() {
+    // Entity picker
+    const entityPicker = this.shadowRoot.querySelector("ha-entity-picker");
+    if (entityPicker) {
+      entityPicker.hass = this._hass;
+      entityPicker.value = this._config.entity || "";
+      entityPicker.includeDomains = ["light"];
+      entityPicker.allowCustomEntity = true;
+      entityPicker.addEventListener("value-changed", (e) => {
+        this._config.entity = e.detail.value;
         this._fireConfigChanged();
       });
     }
 
-    // Icon input
-    const iconInput = this.shadowRoot.getElementById("icon");
-    if (iconInput) {
-      iconInput.addEventListener("change", (e) => {
-        if (e.target.value) {
-          this._config.icon = e.target.value;
+    // Icon picker
+    const iconPicker = this.shadowRoot.querySelector("ha-icon-picker");
+    if (iconPicker) {
+      iconPicker.hass = this._hass;
+      iconPicker.value = this._config.icon || "mdi:lightbulb";
+      iconPicker.addEventListener("value-changed", (e) => {
+        if (e.detail.value) {
+          this._config.icon = e.detail.value;
         } else {
           delete this._config.icon;
         }
         this._fireConfigChanged();
       });
     }
+  }
 
-
+  _setupEventListeners() {
     // Color picker and text input pairs
     const colorPairs = [
       ["primary_colour_picker", "primary_colour"],
