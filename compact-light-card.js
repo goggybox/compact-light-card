@@ -107,6 +107,7 @@ class CompactLightCard extends HTMLElement {
           width: 100%;
           height: 100%;
           transition: background 0.6s ease;
+          user-select: none;
         }
 
         .brightness-bar {
@@ -351,6 +352,31 @@ class CompactLightCard extends HTMLElement {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
     }
+    // remove event listeners
+    if (this._mousedownHandler) {
+      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
+      if (brightnessEl) {
+        brightnessEl.removeEventListener("mousedown", this._mousedownHandler);
+      }
+    }
+    if (this._mousemoveHandler) {
+      document.removeEventListener("mousemove", this._mousemoveHandler);
+    }
+    if (this._mouseupHandler) {
+      document.removeEventListener("mouseup", this._mouseupHandler);
+    }
+    if (this._touchstartHandler) {
+      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
+      if (brightnessEl) {
+        brightnessEl.removeEventListener("touchstart", this._touchstartHandler);
+      }
+    }
+    if (this._touchmoveHandler) {
+      document.removeEventListener("touchmove", this._touchmoveHandler);
+    }
+    if (this._touchendHandler) {
+      document.removeEventListener("touchend", this._touchendHandler);
+    }
   }
 
   _refreshCard() {
@@ -581,6 +607,9 @@ class CompactLightCard extends HTMLElement {
     // UPDATE CARD
     this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
 
+    // only setup brightness handlers once
+    if (this._brightnessHandlersSetup) return;
+    this._brightnessHandlersSetup = true;
 
     // ---------------------------------------------
     // INTERACTIONS
@@ -806,46 +835,83 @@ class CompactLightCard extends HTMLElement {
     };
 
     // mouse held down
-    brightnessEl.addEventListener("mousedown", (e) => {
+    this._mousedownHandler = (e) => {
       e.preventDefault();
       onDragStart(e.clientX);
-    });
+    };
+    brightnessEl.addEventListener("mousedown", this._mousedownHandler);
 
     // mouse move
-    document.addEventListener("mousemove", (e) => {
+    this._mousemoveHandler = (e) => {
       if (!this.isDragging) return;
       e.preventDefault();
       onDragMove(e.clientX);
-    });
+    };
+    document.addEventListener("mousemove", this._mousemoveHandler);
 
     // mouse up
-    document.addEventListener("mouseup", () => {
+    this._mouseupHandler = () => {
       if (!this.isDragging) return;
       onDragEnd();
-    });
+    };
+    document.addEventListener("mouseup", this._mouseupHandler);
 
-    // touch start
-    brightnessEl.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      onDragStart(touch.clientX);
-    });
+    // touch start - don't start drag yet, wait for touchmove to detect scroll vs drag
+    this._touchstartHandler = (e) => {
+      // store initial touch position for scroll detection
+      this._initialTouchY = e.touches[0].clientY;
+      this._initialTouchX = e.touches[0].clientX;
+      this._touchStarted = true;
+      this._dragStartedFromTouch = false;
+    };
+    brightnessEl.addEventListener("touchstart", this._touchstartHandler);
 
     // touch move
-    document.addEventListener("touchmove", (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      const touch = e.touches[0];
-      onDragMove(touch.clientX);
-    }, { passive: false });
+    this._touchmoveHandler = (e) => {
+      // if drag hasn't started yet, check if this should be a drag or scroll
+      if (!this._dragStartedFromTouch && this._touchStarted) {
+        const currentTouchY = e.touches[0].clientY;
+        const currentTouchX = e.touches[0].clientX;
+        const deltaY = Math.abs(currentTouchY - this._initialTouchY);
+        const deltaX = Math.abs(currentTouchX - this._initialTouchX);
+        
+        // threshold for distinguishing between scroll and drag
+        const SCROLL_THRESHOLD = 10;
+        
+        // if vertical movement is significant, it's a scroll - allow browser to handle it
+        if (deltaY > SCROLL_THRESHOLD) {
+          this._touchStarted = false;
+          return; // don't preventDefault, allow normal scroll
+        }
+        
+        // if horizontal movement is significant, start drag
+        if (deltaX > SCROLL_THRESHOLD) {
+          this._dragStartedFromTouch = true;
+          e.preventDefault(); // now prevent default for drag
+          onDragStart(this._initialTouchX);
+        }
+      }
+      
+      // if drag is active, continue dragging
+      if (this._dragStartedFromTouch && this.isDragging) {
+        e.preventDefault();
+        onDragMove(e.touches[0].clientX);
+      }
+    };
+    document.addEventListener("touchmove", this._touchmoveHandler, { passive: false });
 
     // touch end
-    document.addEventListener("touchend", (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      const touch = e.changedTouches[0];
-      onDragEnd();
-    });
+    this._touchendHandler = (e) => {
+      if (this._dragStartedFromTouch && this.isDragging) {
+        e.preventDefault();
+        onDragEnd();
+      }
+      this._touchStarted = false;
+      this._dragStartedFromTouch = false;
+      this._initialTouchY = null;
+      this._initialTouchX = null;
+    };
+    document.addEventListener("touchend", this._touchendHandler);
 
   }
 
