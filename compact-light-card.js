@@ -607,9 +607,9 @@ class CompactLightCard extends HTMLElement {
     // UPDATE CARD
     this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
 
-    // only setup brightness handlers once
-    if (this._brightnessHandlersSetup) return;
-    this._brightnessHandlersSetup = true;
+    // only setup handlers once
+    if (this._handlersSetup) return;
+    this._handlersSetup = true;
 
     // ---------------------------------------------
     // INTERACTIONS
@@ -619,26 +619,6 @@ class CompactLightCard extends HTMLElement {
     const percentageEl = this.shadowRoot.querySelector(".percentage");
     const contentEl = this.shadowRoot.querySelector(".content");
     let currentBrightness = brightnessPercent;
-
-    // register icon click
-    const iconEl = this.shadowRoot.querySelector(".icon");
-    iconEl?.replaceWith(iconEl.cloneNode(true)); // remove existing listener
-    const newIconEl = this.shadowRoot.querySelector(".icon");
-
-    newIconEl.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-
-      const entityId = this.config.entity;
-      const stateObj = hass.states[entityId];
-      if (!stateObj) return;
-
-      // toggle light
-      if (stateObj.state == "on") {
-        hass.callService("light", "turn_off", { entity_id: entityId });
-      } else {
-        hass.callService("light", "turn_on", { entity_id: entityId });
-      }
-    });
 
     // register arrow interactions (click, double-tap, hold)
     const arrowEl = this.shadowRoot.querySelector(".arrow");
@@ -933,6 +913,25 @@ class CompactLightCard extends HTMLElement {
     const haIconEl = root.querySelector("#main-icon");
     const contentEl = root.querySelector(".content");
 
+    // register icon click handler every time (state changes)
+    const newHaIconEl = haIconEl.cloneNode(true);
+    haIconEl.replaceWith(newHaIconEl);
+    newHaIconEl.style.pointerEvents = "auto"; // enable pointer events for clicking
+    newHaIconEl.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+
+      const entityId = this.config.entity;
+      const stateObj = this._hass.states[entityId];
+      if (!stateObj) return;
+
+      // toggle light
+      if (stateObj.state == "on") {
+        this._hass.callService("light", "turn_off", { entity_id: entityId });
+      } else {
+        this._hass.callService("light", "turn_on", { entity_id: entityId });
+      }
+    });
+
     // update name
     if (nameEl) nameEl.textContent = name;
     // update displayed percentage
@@ -944,8 +943,8 @@ class CompactLightCard extends HTMLElement {
       }
     }
     // update icon
-    if (haIconEl && icon) {
-      haIconEl.setAttribute("icon", icon);
+    if (icon) {
+      newHaIconEl.setAttribute("icon", icon);
     }
     // update bar width
     // - the provided barWidth is just a % from 0-100%, must + 14px.
