@@ -107,6 +107,7 @@ class CompactLightCard extends HTMLElement {
           width: 100%;
           height: 100%;
           transition: background 0.6s ease;
+          user-select: none;
         }
 
         .brightness-bar {
@@ -351,6 +352,31 @@ class CompactLightCard extends HTMLElement {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
     }
+    // remove event listeners
+    if (this._mousedownHandler) {
+      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
+      if (brightnessEl) {
+        brightnessEl.removeEventListener("mousedown", this._mousedownHandler);
+      }
+    }
+    if (this._mousemoveHandler) {
+      document.removeEventListener("mousemove", this._mousemoveHandler);
+    }
+    if (this._mouseupHandler) {
+      document.removeEventListener("mouseup", this._mouseupHandler);
+    }
+    if (this._touchstartHandler) {
+      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
+      if (brightnessEl) {
+        brightnessEl.removeEventListener("touchstart", this._touchstartHandler);
+      }
+    }
+    if (this._touchmoveHandler) {
+      document.removeEventListener("touchmove", this._touchmoveHandler);
+    }
+    if (this._touchendHandler) {
+      document.removeEventListener("touchend", this._touchendHandler);
+    }
   }
 
   _refreshCard() {
@@ -581,6 +607,9 @@ class CompactLightCard extends HTMLElement {
     // UPDATE CARD
     this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
 
+    // only setup handlers once
+    if (this._handlersSetup) return;
+    this._handlersSetup = true;
 
     // ---------------------------------------------
     // INTERACTIONS
@@ -590,26 +619,6 @@ class CompactLightCard extends HTMLElement {
     const percentageEl = this.shadowRoot.querySelector(".percentage");
     const contentEl = this.shadowRoot.querySelector(".content");
     let currentBrightness = brightnessPercent;
-
-    // register icon click
-    const iconEl = this.shadowRoot.querySelector(".icon");
-    iconEl?.replaceWith(iconEl.cloneNode(true)); // remove existing listener
-    const newIconEl = this.shadowRoot.querySelector(".icon");
-
-    newIconEl.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-
-      const entityId = this.config.entity;
-      const stateObj = hass.states[entityId];
-      if (!stateObj) return;
-
-      // toggle light
-      if (stateObj.state == "on") {
-        hass.callService("light", "turn_off", { entity_id: entityId });
-      } else {
-        hass.callService("light", "turn_on", { entity_id: entityId });
-      }
-    });
 
     // register arrow interactions (click, double-tap, hold)
     const arrowEl = this.shadowRoot.querySelector(".arrow");
@@ -806,46 +815,83 @@ class CompactLightCard extends HTMLElement {
     };
 
     // mouse held down
-    brightnessEl.addEventListener("mousedown", (e) => {
+    this._mousedownHandler = (e) => {
       e.preventDefault();
       onDragStart(e.clientX);
-    });
+    };
+    brightnessEl.addEventListener("mousedown", this._mousedownHandler);
 
     // mouse move
-    document.addEventListener("mousemove", (e) => {
+    this._mousemoveHandler = (e) => {
       if (!this.isDragging) return;
       e.preventDefault();
       onDragMove(e.clientX);
-    });
+    };
+    document.addEventListener("mousemove", this._mousemoveHandler);
 
     // mouse up
-    document.addEventListener("mouseup", () => {
+    this._mouseupHandler = () => {
       if (!this.isDragging) return;
       onDragEnd();
-    });
+    };
+    document.addEventListener("mouseup", this._mouseupHandler);
 
-    // touch start
-    brightnessEl.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      onDragStart(touch.clientX);
-    });
+    // touch start - don't start drag yet, wait for touchmove to detect scroll vs drag
+    this._touchstartHandler = (e) => {
+      // store initial touch position for scroll detection
+      this._initialTouchY = e.touches[0].clientY;
+      this._initialTouchX = e.touches[0].clientX;
+      this._touchStarted = true;
+      this._dragStartedFromTouch = false;
+    };
+    brightnessEl.addEventListener("touchstart", this._touchstartHandler);
 
     // touch move
-    document.addEventListener("touchmove", (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      const touch = e.touches[0];
-      onDragMove(touch.clientX);
-    }, { passive: false });
+    this._touchmoveHandler = (e) => {
+      // if drag hasn't started yet, check if this should be a drag or scroll
+      if (!this._dragStartedFromTouch && this._touchStarted) {
+        const currentTouchY = e.touches[0].clientY;
+        const currentTouchX = e.touches[0].clientX;
+        const deltaY = Math.abs(currentTouchY - this._initialTouchY);
+        const deltaX = Math.abs(currentTouchX - this._initialTouchX);
+        
+        // threshold for distinguishing between scroll and drag
+        const SCROLL_THRESHOLD = 10;
+        
+        // if vertical movement is significant, it's a scroll - allow browser to handle it
+        if (deltaY > SCROLL_THRESHOLD) {
+          this._touchStarted = false;
+          return; // don't preventDefault, allow normal scroll
+        }
+        
+        // if horizontal movement is significant, start drag
+        if (deltaX > SCROLL_THRESHOLD) {
+          this._dragStartedFromTouch = true;
+          e.preventDefault(); // now prevent default for drag
+          onDragStart(this._initialTouchX);
+        }
+      }
+      
+      // if drag is active, continue dragging
+      if (this._dragStartedFromTouch && this.isDragging) {
+        e.preventDefault();
+        onDragMove(e.touches[0].clientX);
+      }
+    };
+    document.addEventListener("touchmove", this._touchmoveHandler, { passive: false });
 
     // touch end
-    document.addEventListener("touchend", (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      const touch = e.changedTouches[0];
-      onDragEnd();
-    });
+    this._touchendHandler = (e) => {
+      if (this._dragStartedFromTouch && this.isDragging) {
+        e.preventDefault();
+        onDragEnd();
+      }
+      this._touchStarted = false;
+      this._dragStartedFromTouch = false;
+      this._initialTouchY = null;
+      this._initialTouchX = null;
+    };
+    document.addEventListener("touchend", this._touchendHandler);
 
   }
 
@@ -867,6 +913,25 @@ class CompactLightCard extends HTMLElement {
     const haIconEl = root.querySelector("#main-icon");
     const contentEl = root.querySelector(".content");
 
+    // register icon click handler every time (state changes)
+    const newHaIconEl = haIconEl.cloneNode(true);
+    haIconEl.replaceWith(newHaIconEl);
+    newHaIconEl.style.pointerEvents = "auto"; // enable pointer events for clicking
+    newHaIconEl.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+
+      const entityId = this.config.entity;
+      const stateObj = this._hass.states[entityId];
+      if (!stateObj) return;
+
+      // toggle light
+      if (stateObj.state == "on") {
+        this._hass.callService("light", "turn_off", { entity_id: entityId });
+      } else {
+        this._hass.callService("light", "turn_on", { entity_id: entityId });
+      }
+    });
+
     // update name
     if (nameEl) nameEl.textContent = name;
     // update displayed percentage
@@ -878,8 +943,8 @@ class CompactLightCard extends HTMLElement {
       }
     }
     // update icon
-    if (haIconEl && icon) {
-      haIconEl.setAttribute("icon", icon);
+    if (icon) {
+      newHaIconEl.setAttribute("icon", icon);
     }
     // update bar width
     // - the provided barWidth is just a % from 0-100%, must + 14px.
