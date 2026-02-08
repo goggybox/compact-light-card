@@ -74,5 +74,8 @@ Alternatively:
 - Ensure the result has the creator as "goggybox".
 - Click download!
 
+## Contributors
+[@berkayopak](https://github.com/berkayopak)
+
 ## License
 GPLv3.0 © [goggybox](https://github.com/goggybox)
