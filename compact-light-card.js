@@ -1,14 +1,26 @@
-/*
- * Compact Light Card
- *
- * A clean, compact, and highly customisable light card for Home Assistant.
- *
- * Author: goggybox
- * License: GPL3.0
- */
+// -------------------------compact-light-card-------------------------
+// This file is part of the compact-light-card for Home Assistant.
+//   - A clean, compact, and highly customisable light card.
+// Copyright (C) 2026 goggybox https://github.com/goggybox
 
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 
-console.log("compact-light-card.js loaded!");
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// that this program is licensed under. See LICENSE file. If not
+// available, see <https://www.gnu.org/licenses/>.
+
+// Please keep this header comment in all copies of the program.
+// --------------------------------------------------------------------
+
+console.log("compact-light-card.js v0.7.02 loaded!");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
@@ -19,8 +31,16 @@ class CompactLightCard extends HTMLElement {
     this.startX = 0;
     this.startWidth = 0;
     this.supportsBrightness = true;
+    this.supportsColorTemp = false;
+    this.supportsRgb = false;
     this.pendingUpdate = null;
     this._hass = null;
+    this._listenersInitialized = false;
+    this._iconListenerInitialized = false;
+    this._arrowListenerInitialized = false;
+    this._modeButtonsInitialized = false;
+    this._currentMode = "brightness"; // brightness, color_temp, rgb
+    this._controllingSecondary = false; // entity swap state
     this.shadowRoot.innerHTML = `
       <style>
         :host {
@@ -29,6 +49,7 @@ class CompactLightCard extends HTMLElement {
           --icon-width: var(--height);
           --icon-border-radius: 15px;
           --icon-font-size: 36px;
+          --font-size: 18px;
 
           --off-background-colour: var(--secondary-background-color);
           --off-text-colour: var(--secondary-text-color);
@@ -38,14 +59,13 @@ class CompactLightCard extends HTMLElement {
         }
 
         .card-container {
-          max-width: 500px;
+          width: 100%;
           height: var(--height);
           background: rgba(0,0,0,0.0);
           border-radius: var(--icon-border-radius);
-          margin: 0 auto;
-          margin-right: 5px;
-          margin-left: 5px;
+          margin: 0;
           overflow: hidden;
+          box-sizing: border-box;
         }
 
         .card {
@@ -54,6 +74,7 @@ class CompactLightCard extends HTMLElement {
           backdrop-filter: blur(0px);
           display: flex;
           align-items: center;
+          position: relative;
         }
 
         .icon-wrapper {
@@ -89,7 +110,7 @@ class CompactLightCard extends HTMLElement {
           z-index: 1;
           box-sizing: border-box;
           padding: 3px 6px 3px 8px;
-          overflow: false;
+          overflow: hidden;
           background: var(--icon-border-colour);
           margin-left: -69px;
           flex: 1;
@@ -102,20 +123,41 @@ class CompactLightCard extends HTMLElement {
           padding: 0px 0px 0px 5px;
         }
 
+        .content.with-card-border {
+          background: var(--card-border-colour);
+        }
+
         .brightness {
           border-radius: 12px;
           width: 100%;
           height: 100%;
           transition: background 0.6s ease;
-          user-select: none;
+          position: relative;
+        }
+
+        .color-marker {
+          position: absolute;
+          top: 0;
+          width: 4px;
+          height: 100%;
+          background: white;
+          border-radius: 2px;
+          box-shadow: 0 0 4px rgba(0,0,0,0.5);
+          pointer-events: none;
+          display: none;
+          z-index: 1;
+        }
+
+        .color-marker.visible {
+          display: block;
         }
 
         .brightness-bar {
           height: 100%;
           background: var(--light-primary-colour);
-          border-radius: 12px;
+          border-radius: 12px 0 0 12px;
           box-shadow: rgba(0, 0, 0, 0.1) 0px 5px 15px;
-          transition: width 0.6s ease;
+          transition: width 0.6s ease, border-radius 0.2s ease;
         }
 
         .overlay {
@@ -133,28 +175,118 @@ class CompactLightCard extends HTMLElement {
         .name {
           padding-left: 79px;
           font-weight: bold;
-          font-size: 18px;
+          font-size: var(--font-size);
           color: var(--primary-text-color);
         }
 
         .right-info {
           display: flex;
           align-items: center;
-          gap: 16px;
+          gap: 8px;
+          height: 100%;
+          padding: 0 8px 0 12px;
+        }
+
+        .right-info.value-bar {
+          border-radius: 0 12px 12px 0;
+          border-left: 2px solid rgba(255, 255, 255, 0.3);
+          background: var(--light-primary-colour, var(--secondary-background-color));
+          transition: background 0.3s ease;
+          min-width: 120px;
+        }
+
+        .right-info.value-bar.with-card-border {
+          margin: 3px 3px 3px 0;
+          border-radius: 0 9px 9px 0;
+          height: calc(100% - 6px);
         }
 
         .percentage {
           font-size: 14px;
           color: var(--primary-text-color);
+          min-width: 42px;
+          text-align: right;
         }
 
         .arrow {
-          padding-right: 10px;
           --mdc-icon-size: 28px;
-          padding-top: 20px;
-          padding-bottom: 20px;
           color: var(--primary-text-color);
           pointer-events: auto;
+        }
+
+        .secondary-icon {
+          --mdc-icon-size: 20px;
+          color: var(--primary-text-color);
+          pointer-events: auto;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 50%;
+          opacity: 0.5;
+          transition: opacity 0.2s ease, background 0.2s ease;
+        }
+
+        .secondary-icon:hover {
+          opacity: 0.8;
+        }
+
+        .secondary-icon.on {
+          opacity: 1;
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .secondary-icon.hidden {
+          display: none;
+        }
+
+        .secondary-icon.swapped {
+          opacity: 1;
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .mode-buttons {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          pointer-events: auto;
+        }
+
+        .mode-btn {
+          --mdc-icon-size: 20px;
+          padding: 4px;
+          border-radius: 50%;
+          cursor: pointer;
+          opacity: 0.5;
+          transition: opacity 0.2s ease, background 0.2s ease;
+        }
+
+        .mode-btn:hover {
+          opacity: 0.8;
+        }
+
+        .mode-btn.active {
+          opacity: 1;
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .mode-btn.hidden {
+          display: none;
+        }
+
+        .color-marker {
+          position: absolute;
+          top: 0;
+          width: 4px;
+          height: 100%;
+          background: white;
+          border-radius: 2px;
+          box-shadow: 0 0 4px rgba(0,0,0,0.5);
+          pointer-events: none;
+          display: none;
+          z-index: 1;
+        }
+
+        .color-marker.visible {
+          display: block;
         }
 
         .haicon {
@@ -183,6 +315,7 @@ class CompactLightCard extends HTMLElement {
           <div class="content">
             <div class="brightness">
               <div class="brightness-bar"></div>
+              <div class="color-marker"></div>
             </div>
           </div>
           <div class="overlay">
@@ -190,6 +323,12 @@ class CompactLightCard extends HTMLElement {
             <div class="name">Loading...</div>
             <div class="right-info">
               <span class="percentage">—</span>
+              <div class="mode-buttons">
+                <ha-icon class="mode-btn active" id="mode-brightness" icon="mdi:brightness-6" title="Brightness"></ha-icon>
+                <ha-icon class="mode-btn hidden" id="mode-colortemp" icon="mdi:thermometer" title="Color Temperature"></ha-icon>
+                <ha-icon class="mode-btn hidden" id="mode-rgb" icon="mdi:palette" title="Color"></ha-icon>
+              </div>
+              <ha-icon class="secondary-icon hidden" id="secondary-icon" icon="mdi:fan"></ha-icon>
               <ha-icon class="arrow" icon="mdi:chevron-right"></ha-icon>
             </div>
           </div>
@@ -291,9 +430,25 @@ class CompactLightCard extends HTMLElement {
       chevron_action: config.chevron_action || { action: "hass-more-info" },
       chevron_hold_action: config.chevron_hold_action,
       chevron_double_tap_action: config.chevron_double_tap_action,
-      opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 1,
+      opacity: config.opacity !== undefined ? Math.max(config.opacity, 0) : 1,
+      opacity_on: config.opacity_on !== undefined ? Math.max(config.opacity_on, 0) : null,
+      opacity_off: config.opacity_off !== undefined ? Math.max(config.opacity_off, 0) : null,
+      icon_opacity: config.icon_opacity !== undefined ? Math.max(config.icon_opacity, 0) : null,
+      icon_opacity_on: config.icon_opacity_on !== undefined ? Math.max(config.icon_opacity_on, 0) : null,
+      icon_opacity_off: config.icon_opacity_off !== undefined ? Math.max(config.icon_opacity_off, 0) : null,
       blur: config.blur !== undefined ? Math.min(config.blur, 10) : 0,
       smart_font_colour: config.smart_font_colour !== false,
+      icon_tap_to_brightness: !!config.icon_tap_to_brightness,
+      turn_on_brightness: config.turn_on_brightness !== undefined ? Math.max(1, Math.min(100, config.turn_on_brightness)) : 100,
+      height: config.height !== undefined ? Math.max(30, Math.min(150, config.height)) : 64,
+      font_size: config.font_size !== undefined ? Math.max(8, Math.min(36, config.font_size)) : 18,
+      icon_background_colour: config.icon_background_colour || null,
+      show_color_temp_button: config.show_color_temp_button !== false, // default true if supported
+      show_rgb_button: config.show_rgb_button !== false, // default true if supported
+      show_value_bar: config.show_value_bar === true, // default false - solid background behind buttons
+      secondary_entity: config.secondary_entity || null,
+      show_secondary_icon: config.show_secondary_icon === true, // default false
+      secondary_icon_action: config.secondary_icon_action || "toggle", // "toggle" or "swap"
     };
 
     // validate off_colours structure
@@ -352,31 +507,6 @@ class CompactLightCard extends HTMLElement {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
     }
-    // remove event listeners
-    if (this._mousedownHandler) {
-      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
-      if (brightnessEl) {
-        brightnessEl.removeEventListener("mousedown", this._mousedownHandler);
-      }
-    }
-    if (this._mousemoveHandler) {
-      document.removeEventListener("mousemove", this._mousemoveHandler);
-    }
-    if (this._mouseupHandler) {
-      document.removeEventListener("mouseup", this._mouseupHandler);
-    }
-    if (this._touchstartHandler) {
-      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
-      if (brightnessEl) {
-        brightnessEl.removeEventListener("touchstart", this._touchstartHandler);
-      }
-    }
-    if (this._touchmoveHandler) {
-      document.removeEventListener("touchmove", this._touchmoveHandler);
-    }
-    if (this._touchendHandler) {
-      document.removeEventListener("touchend", this._touchendHandler);
-    }
   }
 
   _refreshCard() {
@@ -398,12 +528,22 @@ class CompactLightCard extends HTMLElement {
         brightnessPercent: null,
         primaryColour: null,
         secondaryColour: null,
-        icon: null
+        icon: null,
+        colorTemp: null,
+        colorTempPercent: null,
+        rgbColor: null,
+        hue: null
       };
     }
 
-    const entity = this.config.entity;
+    // Determine which entity to control based on swap state
+    const entity = this._controllingSecondary && this.config.secondary_entity
+      ? this.config.secondary_entity
+      : this.config.entity;
     const stateObj = this._hass.states[entity];
+
+    // Detect if this is a fan entity
+    this.isFanEntity = entity.startsWith("fan.");
 
     // ensure entity exists and is connected
     if (!stateObj) {
@@ -413,21 +553,48 @@ class CompactLightCard extends HTMLElement {
         brightnessPercent: 0,
         primaryColour: "#9e9e9e",
         secondaryColour: "#e0e0e0",
-        icon: "mdi:alert"
+        icon: this.isFanEntity ? "mdi:fan" : "mdi:alert",
+        colorTemp: null,
+        colorTempPercent: null,
+        rgbColor: null,
+        hue: null
       };
     }
 
     const state = stateObj.state;
-    const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace("light.", "");
+    const entityType = this.isFanEntity ? "fan" : "light";
+    const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace(`${entityType}.`, "");
     const friendlyName = tempName.length > 30 ? tempName.slice(0, 30) + "..." : tempName;
-    this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);;
 
-    // determine brightness and display text
+    // For fans, check percentage support; for lights, check brightness support
+    if (this.isFanEntity) {
+      this.supportsBrightness = stateObj.attributes.percentage !== undefined ||
+                                 (stateObj.attributes.supported_features & 1);
+    } else {
+      this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);
+    }
+
+    // detect color capabilities
+    const colorModes = stateObj.attributes.supported_color_modes || [];
+    this.supportsColorTemp = colorModes.includes("color_temp");
+    this.supportsRgb = colorModes.some(mode => ["rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode));
+
+    // get color temp range
+    this.minMireds = stateObj.attributes.min_mireds || 153;
+    this.maxMireds = stateObj.attributes.max_mireds || 500;
+
+    // determine brightness/speed and display text
     let brightnessPercent = 0;
     let displayText = "Off";
     if (state == "on") {
-      const brightness = stateObj.attributes.brightness || 255;
-      brightnessPercent = Math.round((brightness / 255) * 100);
+      if (this.isFanEntity) {
+        // Fan uses percentage directly (0-100)
+        brightnessPercent = stateObj.attributes.percentage || 100;
+      } else {
+        // Light uses brightness (0-255)
+        const brightness = stateObj.attributes.brightness || 255;
+        brightnessPercent = Math.round((brightness / 255) * 100);
+      }
       if (this.supportsBrightness) { displayText = `${brightnessPercent}` }
       else {
         displayText = "On";
@@ -435,6 +602,26 @@ class CompactLightCard extends HTMLElement {
       }
     } else if (state == "unavailable") {
       displayText = "Unavailable";
+    }
+
+    // get color temperature
+    let colorTemp = null;
+    let colorTempPercent = null;
+    if (stateObj.attributes.color_temp) {
+      colorTemp = stateObj.attributes.color_temp;
+      // Convert mireds to percentage (inverted: warm = low mireds = high %)
+      colorTempPercent = Math.round(((this.maxMireds - colorTemp) / (this.maxMireds - this.minMireds)) * 100);
+      colorTempPercent = Math.max(0, Math.min(100, colorTempPercent));
+    }
+
+    // get RGB color and hue
+    let rgbColor = stateObj.attributes.rgb_color || null;
+    let hue = null;
+    if (stateObj.attributes.hs_color) {
+      hue = Math.round(stateObj.attributes.hs_color[0]); // 0-360
+    } else if (rgbColor) {
+      // Convert RGB to hue
+      hue = this._rgbToHue(rgbColor[0], rgbColor[1], rgbColor[2]);
     }
 
     // determine colour
@@ -456,8 +643,16 @@ class CompactLightCard extends HTMLElement {
       secondaryColour = `linear-gradient(${gradientColour}, ${gradientColour}), var(--secondary-background-color)`;
     }
 
-    // determine icon
-    const icon = this.config.icon;
+    // determine icon - use entity-appropriate icon when controlling secondary
+    let icon = this.config.icon;
+    if (this._controllingSecondary) {
+      // Use appropriate icon for the secondary entity type
+      if (this.isFanEntity) {
+        icon = stateObj.attributes.icon || "mdi:fan";
+      } else {
+        icon = stateObj.attributes.icon || "mdi:lightbulb";
+      }
+    }
 
     return {
       name: friendlyName,
@@ -465,9 +660,71 @@ class CompactLightCard extends HTMLElement {
       brightnessPercent,
       primaryColour,
       secondaryColour,
-      icon
+      icon,
+      colorTemp,
+      colorTempPercent,
+      rgbColor,
+      hue
     };
 
+  }
+
+  _rgbToHue(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0;
+    if (max !== min) {
+      const d = max - min;
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+    return Math.round(h * 360);
+  }
+
+  _hueToRgb(h) {
+    // Convert hue (0-360) to RGB with full saturation and lightness
+    const s = 1, l = 0.5;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60) { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+
+  _colorTempToRgb(mireds) {
+    // Convert mireds to Kelvin, then to approximate RGB
+    const kelvin = 1000000 / mireds;
+    let r, g, b;
+
+    // Algorithm based on Tanner Helland's work
+    const temp = kelvin / 100;
+
+    if (temp <= 66) {
+      r = 255;
+      g = Math.min(255, Math.max(0, 99.4708025861 * Math.log(temp) - 161.1195681661));
+    } else {
+      r = Math.min(255, Math.max(0, 329.698727446 * Math.pow(temp - 60, -0.1332047592)));
+      g = Math.min(255, Math.max(0, 288.1221695283 * Math.pow(temp - 60, -0.0755148492)));
+    }
+
+    if (temp >= 66) {
+      b = 255;
+    } else if (temp <= 19) {
+      b = 0;
+    } else {
+      b = Math.min(255, Math.max(0, 138.5177312231 * Math.log(temp - 10) - 305.0447927307));
+    }
+
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
   }
 
   // get the usable width of the brightness bar area (minus the icon underlap)
@@ -476,7 +733,14 @@ class CompactLightCard extends HTMLElement {
     const contentEl = this.shadowRoot.querySelector(".content");
     const contentStyle = getComputedStyle(contentEl);
     const paddingRight = parseFloat(contentStyle.paddingRight);
-    const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
+    let contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
+
+    // Only subtract right-info width when show_value_bar is enabled
+    if (this.config && this.config.show_value_bar) {
+      const rightInfoEl = this.shadowRoot.querySelector(".right-info");
+      const rightInfoWidth = rightInfoEl ? rightInfoEl.offsetWidth : 0;
+      contentWidth -= rightInfoWidth;
+    }
     return contentWidth;
   };
 
@@ -503,7 +767,8 @@ class CompactLightCard extends HTMLElement {
         break;
 
       case "toggle":
-        this._hass.callService("light", "toggle", {
+        const domain = this.isFanEntity ? "fan" : "light";
+        this._hass.callService(domain, "toggle", {
           entity_id: entityId
         });
         break;
@@ -575,6 +840,10 @@ class CompactLightCard extends HTMLElement {
     const stateObj = hass.states[entity];
     const state = stateObj.state;
 
+    // apply height and font size
+    this.style.setProperty("--height", `${this.config.height}px`);
+    this.style.setProperty("--font-size", `${this.config.font_size}px`);
+
     // get and apply off colours if configured
     const offColours = this._getOffColours();
     if (offColours) {
@@ -595,11 +864,16 @@ class CompactLightCard extends HTMLElement {
     }
 
     // apply card border colour
-    if (this.config.card_border_colour && this.config.card_border === true) {
-      this.style.setProperty("--card-border-colour", this.config.card_border_colour);
+    if (this.config.card_border === true) {
+      if (this.config.card_border_colour) {
+        this.style.setProperty("--card-border-colour", this.config.card_border_colour);
+      } else {
+        // Use a visible default when card_border enabled but no color specified
+        this.style.setProperty("--card-border-colour", "var(--divider-color, rgba(0, 0, 0, 0.12))");
+      }
     } else {
-      // reset to default
-      this.style.setProperty("--card-border-colour", "--var(--card-background-color");
+      // reset to default (invisible)
+      this.style.setProperty("--card-border-colour", "var(--card-background-color)");
     }
 
     const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
@@ -607,9 +881,8 @@ class CompactLightCard extends HTMLElement {
     // UPDATE CARD
     this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
 
-    // only setup handlers once
-    if (this._handlersSetup) return;
-    this._handlersSetup = true;
+    // UPDATE SECONDARY ENTITY ICON
+    this._updateSecondaryIcon();
 
     // ---------------------------------------------
     // INTERACTIONS
@@ -620,166 +893,547 @@ class CompactLightCard extends HTMLElement {
     const contentEl = this.shadowRoot.querySelector(".content");
     let currentBrightness = brightnessPercent;
 
-    // register arrow interactions (click, double-tap, hold)
-    const arrowEl = this.shadowRoot.querySelector(".arrow");
-    if (arrowEl) {
-      const newArrowEl = arrowEl.cloneNode(true);
-      arrowEl.replaceWith(newArrowEl);
-
-      let tapCount = 0;
-      let tapTimer = null;
-      let holdTimer = null;
-      let holdTriggered = false;
-      const HOLD_THRESHOLD = 500; // in ms
-      const DOUBLE_TAP_THRESHOLD = 300; // in ms
-
-      const handleSingleTap = () => {
-        if (tapCount === 1) {
-          this._performAction(this.config.chevron_action);
-        }
-        tapCount = 0;
-      };
-
-      const startHold = () => {
-        holdTriggered = false;
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          holdTriggered = true;
-          tapCount = 0;
-          this._performAction(this.config.chevron_hold_action);
-        }, HOLD_THRESHOLD);
-      };
-
-      const cancelHold = () => {
-        if (holdTimer) {
-          clearTimeout(holdTimer);
-          holdTimer = null;
-        }
-      };
-
-      const handleTap = () => {
-        cancelHold();
-        tapCount++;
-        if (tapCount === 1) {
-          tapTimer = setTimeout(handleSingleTap, DOUBLE_TAP_THRESHOLD);
-        } else if (tapCount === 2) {
-          clearTimeout(tapTimer);
-          tapTimer = null;
-          tapCount = 0;
-          this._performAction(this.config.chevron_double_tap_action);
-        }
-      };
-
-      // single touch handlers for both mouse and touch
-      const handlePointerDown = (ev) => {
+    // register icon click - only once
+    if (!this._iconListenerInitialized) {
+      const iconEl = this.shadowRoot.querySelector(".icon");
+      iconEl.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        if (ev.type === "touchstart") {
-          ev.preventDefault();
-        }
-        startHold();
-      };
-      const handlePointerUp = (ev) => {
-        ev.stopPropagation();
-        if (holdTriggered) return;
-        if (holdTimer) {
-          cancelHold();
-          handleTap();
-        }
-      };
-      const handlePointerCancel = () => {
-        cancelHold();
-        tapCount = 0;
-        if (tapTimer) {
-          clearTimeout(tapTimer);
-          tapTimer = null;
-        }
-      };
 
-      // mouse handler
-      newArrowEl.addEventListener("mousedown", handlePointerDown);
-      newArrowEl.addEventListener("mouseup", handlePointerUp);
-      newArrowEl.addEventListener("mouseleave", handlePointerCancel);
+        // Use the currently controlled entity (primary or secondary if swapped)
+        const entityId = this._controllingSecondary && this.config.secondary_entity
+          ? this.config.secondary_entity
+          : this.config.entity;
+        const stateObj = this._hass.states[entityId];
+        if (!stateObj) return;
 
-      // touch handler
-      newArrowEl.addEventListener("touchstart", handlePointerDown, { passive: false });
-      newArrowEl.addEventListener("touchend", handlePointerUp);
-      newArrowEl.addEventListener("touchcancel", handlePointerCancel);
+        const isFan = entityId.startsWith("fan.");
+        const domain = isFan ? "fan" : "light";
+
+        // toggle entity
+        if (stateObj.state == "on") {
+          this._hass.callService(domain, "turn_off", { entity_id: entityId });
+        } else {
+          // turn on - use configured brightness/percentage if icon_tap_to_brightness is enabled
+          if (this.config.icon_tap_to_brightness) {
+            if (isFan) {
+              this._hass.callService("fan", "turn_on", {
+                entity_id: entityId,
+                percentage: this.config.turn_on_brightness
+              });
+            } else {
+              this._hass.callService("light", "turn_on", {
+                entity_id: entityId,
+                brightness_pct: this.config.turn_on_brightness
+              });
+            }
+          } else {
+            this._hass.callService(domain, "turn_on", { entity_id: entityId });
+          }
+        }
+      });
+      this._iconListenerInitialized = true;
     }
 
-    // convert mouse/touch X to brightness %
-    const getBrightnessFromX = (clientX) => {
+    // register secondary icon click - only once
+    if (!this._secondaryIconListenerInitialized) {
+      const secondaryIconEl = this.shadowRoot.querySelector("#secondary-icon");
+      if (secondaryIconEl) {
+        secondaryIconEl.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const secondaryEntity = this.config.secondary_entity;
+          if (!secondaryEntity || !this._hass.states[secondaryEntity]) return;
+
+          const iconAction = this.config.secondary_icon_action || "toggle";
+
+          if (iconAction === "swap") {
+            // Check if the secondary entity supports more than on/off (has brightness/percentage/color)
+            const secondaryStateObj = this._hass.states[secondaryEntity];
+            const isSecondaryFan = secondaryEntity.startsWith("fan.");
+            const hasAdvancedControls = isSecondaryFan
+              ? (secondaryStateObj.attributes.percentage !== undefined || (secondaryStateObj.attributes.supported_features & 1))
+              : ((secondaryStateObj.attributes.supported_features & 1) ||
+                 secondaryStateObj.attributes.brightness !== undefined ||
+                 (secondaryStateObj.attributes.supported_color_modes || []).some(mode =>
+                   ["color_temp", "rgb", "rgbw", "rgbww", "hs", "xy"].includes(mode)));
+
+            if (hasAdvancedControls) {
+              // Swap control to the other entity
+              this._controllingSecondary = !this._controllingSecondary;
+              // Reset mode to brightness when swapping
+              this._currentMode = "brightness";
+              // Force a refresh of the card
+              this._refreshCard();
+              // Update secondary icon
+              this._updateSecondaryIcon();
+            } else {
+              // Fall back to toggle for on/off only entities
+              const domain = secondaryEntity.split(".")[0];
+              this._hass.callService(domain, "toggle", { entity_id: secondaryEntity });
+            }
+          } else {
+            // "toggle" action - simple toggle without swap
+            const entityToToggle = this._controllingSecondary
+              ? this.config.entity  // Toggle primary when swapped
+              : secondaryEntity;    // Toggle secondary normally
+            const domain = entityToToggle.split(".")[0];
+            this._hass.callService(domain, "toggle", { entity_id: entityToToggle });
+          }
+        });
+        this._secondaryIconListenerInitialized = true;
+      }
+    }
+
+    // register arrow interactions (click, double-tap, hold) - only once
+    if (!this._arrowListenerInitialized) {
+      const arrowEl = this.shadowRoot.querySelector(".arrow");
+      if (arrowEl) {
+        let tapCount = 0;
+        let tapTimer = null;
+        let holdTimer = null;
+        let holdTriggered = false;
+        const HOLD_THRESHOLD = 500; // in ms
+        const DOUBLE_TAP_THRESHOLD = 300; // in ms
+
+        const handleSingleTap = () => {
+          if (tapCount === 1) {
+            this._performAction(this.config.chevron_action);
+          }
+          tapCount = 0;
+        };
+
+        const startHold = () => {
+          holdTriggered = false;
+          holdTimer = setTimeout(() => {
+            holdTimer = null;
+            holdTriggered = true;
+            tapCount = 0;
+            this._performAction(this.config.chevron_hold_action);
+          }, HOLD_THRESHOLD);
+        };
+
+        const cancelHold = () => {
+          if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+        };
+
+        const handleTap = () => {
+          cancelHold();
+          tapCount++;
+          if (tapCount === 1) {
+            tapTimer = setTimeout(handleSingleTap, DOUBLE_TAP_THRESHOLD);
+          } else if (tapCount === 2) {
+            clearTimeout(tapTimer);
+            tapTimer = null;
+            tapCount = 0;
+            this._performAction(this.config.chevron_double_tap_action);
+          }
+        };
+
+        // single touch handlers for both mouse and touch
+        const handlePointerDown = (ev) => {
+          ev.stopPropagation();
+          if (ev.type === "touchstart") {
+            ev.preventDefault();
+          }
+          startHold();
+        };
+        const handlePointerUp = (ev) => {
+          ev.stopPropagation();
+          if (holdTriggered) return;
+          if (holdTimer) {
+            cancelHold();
+            handleTap();
+          }
+        };
+        const handlePointerCancel = () => {
+          cancelHold();
+          tapCount = 0;
+          if (tapTimer) {
+            clearTimeout(tapTimer);
+            tapTimer = null;
+          }
+        };
+
+        // mouse handler
+        arrowEl.addEventListener("mousedown", handlePointerDown);
+        arrowEl.addEventListener("mouseup", handlePointerUp);
+        arrowEl.addEventListener("mouseleave", handlePointerCancel);
+
+        // touch handler
+        arrowEl.addEventListener("touchstart", handlePointerDown, { passive: false });
+        arrowEl.addEventListener("touchend", handlePointerUp);
+        arrowEl.addEventListener("touchcancel", handlePointerCancel);
+      }
+      this._arrowListenerInitialized = true;
+    }
+
+    // setup mode buttons - show/hide based on capabilities and config
+    const modeBrightnessBtn = this.shadowRoot.querySelector("#mode-brightness");
+    const modeColorTempBtn = this.shadowRoot.querySelector("#mode-colortemp");
+    const modeRgbBtn = this.shadowRoot.querySelector("#mode-rgb");
+
+    // Show/hide mode buttons based on capabilities and config
+    if (this.supportsColorTemp && this.config.show_color_temp_button) {
+      modeColorTempBtn.classList.remove("hidden");
+    } else {
+      modeColorTempBtn.classList.add("hidden");
+    }
+    if (this.supportsRgb && this.config.show_rgb_button) {
+      modeRgbBtn.classList.remove("hidden");
+    } else {
+      modeRgbBtn.classList.add("hidden");
+    }
+
+    // Hide brightness button if it's the only one (no point showing just one button)
+    const hasMultipleModes = (this.supportsColorTemp && this.config.show_color_temp_button) ||
+                              (this.supportsRgb && this.config.show_rgb_button);
+    if (!hasMultipleModes) {
+      modeBrightnessBtn.classList.add("hidden");
+    } else {
+      modeBrightnessBtn.classList.remove("hidden");
+    }
+
+    // Apply value-bar class based on config
+    const rightInfoEl = this.shadowRoot.querySelector(".right-info");
+    if (this.config.show_value_bar) {
+      rightInfoEl.classList.add("value-bar");
+      // Apply card border to value bar outer edges (not left divider)
+      if (this.config.card_border) {
+        rightInfoEl.classList.add("with-card-border");
+      } else {
+        rightInfoEl.classList.remove("with-card-border");
+      }
+    } else {
+      rightInfoEl.classList.remove("value-bar");
+      rightInfoEl.classList.remove("with-card-border");
+    }
+
+    // Register mode button click handlers - only once
+    if (!this._modeButtonsInitialized) {
+      const setActiveMode = (mode) => {
+        this._currentMode = mode;
+        modeBrightnessBtn.classList.toggle("active", mode === "brightness");
+        modeColorTempBtn.classList.toggle("active", mode === "color_temp");
+        modeRgbBtn.classList.toggle("active", mode === "rgb");
+
+        // Update bar and marker based on mode
+        const barEl = this.shadowRoot.querySelector(".brightness-bar");
+        const markerEl = this.shadowRoot.querySelector(".color-marker");
+        const brightnessEl = this.shadowRoot.querySelector(".brightness");
+
+        if (mode === "color_temp") {
+          // Show full gradient background, hide bar fill, show marker
+          brightnessEl.style.background = "linear-gradient(to right, #ff8c00, #ffd700, #fffaf0, #e0ffff, #87ceeb)";
+          barEl.style.display = "none";
+          markerEl.classList.add("visible");
+        } else if (mode === "rgb") {
+          // Show full rainbow gradient, hide bar fill, show marker
+          brightnessEl.style.background = "linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)";
+          barEl.style.display = "none";
+          markerEl.classList.add("visible");
+        } else {
+          // Brightness mode: restore normal bar behavior
+          const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+            ? this.config.secondary_entity
+            : this.config.entity;
+          const stateObj = this._hass.states[controlledEntity];
+          const isOn = stateObj && stateObj.state === "on";
+          brightnessEl.style.background = isOn ? "var(--light-secondary-colour)" : "var(--off-background-colour)";
+          barEl.style.display = "";
+          barEl.style.background = "var(--light-primary-colour)";
+          markerEl.classList.remove("visible");
+        }
+
+        // Update display for current mode
+        this._updateModeDisplay();
+      };
+
+      modeBrightnessBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setActiveMode("brightness");
+      });
+      modeColorTempBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setActiveMode("color_temp");
+      });
+      modeRgbBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setActiveMode("rgb");
+      });
+
+      this._modeButtonsInitialized = true;
+    }
+
+    // Update mode display when state changes
+    this._updateModeDisplay = () => {
+      const { brightnessPercent, colorTempPercent, colorTemp, hue, primaryColour } = this._getCardState();
+      const percentageEl = this.shadowRoot.querySelector(".percentage");
+      const markerEl = this.shadowRoot.querySelector(".color-marker");
+      const rightInfoEl = this.shadowRoot.querySelector(".right-info");
+      const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+        ? this.config.secondary_entity
+        : this.config.entity;
+      const stateObj = this._hass.states[controlledEntity];
+
+      if (!stateObj || stateObj.state !== "on") return;
+
+      let displayValue;
+      let rightInfoBg = primaryColour;
+      const usableWidth = this.getUsableWidth();
+
+      switch (this._currentMode) {
+        case "color_temp":
+          if (colorTemp !== null) {
+            // Convert mireds to Kelvin
+            const kelvin = Math.round(1000000 / colorTemp);
+            displayValue = `${kelvin}K`;
+            // Position marker based on color temp percentage
+            const tempPercent = colorTempPercent / 100;
+            const markerPosTemp = window.left_offset + tempPercent * usableWidth;
+            if (!this.isDragging) markerEl.style.left = `${markerPosTemp}px`;
+            // Set right-info background to color temp color
+            rightInfoBg = this._colorTempToRgb(colorTemp);
+          } else {
+            displayValue = "—";
+          }
+          break;
+        case "rgb":
+          if (hue !== null) {
+            displayValue = `${hue}°`;
+            // Position marker based on hue
+            const huePercent = hue / 360;
+            const markerPosRgb = window.left_offset + huePercent * usableWidth;
+            if (!this.isDragging) markerEl.style.left = `${markerPosRgb}px`;
+            // Set right-info background to hue color
+            const [r, g, b] = this._hueToRgb(hue);
+            rightInfoBg = `rgb(${r}, ${g}, ${b})`;
+          } else {
+            displayValue = "—";
+          }
+          break;
+        default: // brightness
+          displayValue = `${brightnessPercent}%`;
+          // Use light's primary colour for brightness mode
+          rightInfoBg = primaryColour;
+      }
+
+      // Update right-info background (only when show_value_bar is enabled)
+      if (rightInfoEl && !this.isDragging && this.config.show_value_bar) {
+        rightInfoEl.style.background = rightInfoBg;
+      }
+
+      if (!this.isDragging && percentageEl) {
+        percentageEl.textContent = displayValue;
+      }
+    };
+
+    // Call _updateModeDisplay on every state update to show correct value
+    this._updateModeDisplay();
+
+    // convert mouse/touch X to value based on current mode
+    // Returns 0-100 for brightness/color_temp, 0-360 for hue
+    const getValueFromX = (clientX) => {
       const rect = brightnessEl.getBoundingClientRect();
       let x = clientX - (rect.left + window.left_offset);
       const usableWidth = this.getUsableWidth();
       x = Math.max(0, Math.min(x, usableWidth));
-      return Math.round((x / usableWidth) * 100);
+      const percent = x / usableWidth;
+
+      switch (this._currentMode) {
+        case "color_temp":
+          return Math.round(percent * 100); // 0-100%
+        case "rgb":
+          return Math.round(percent * 360); // 0-360 hue
+        default: // brightness
+          return Math.round(1 + percent * 99); // 1-100%
+      }
     };
 
-    // update the width of the brightness bar (without applying the brightness to the light)
-    const updateBarPreview = (brightness) => {
-      const roundedBrightness = Math.round(brightness);
+    // Legacy alias for brightness mode
+    const getBrightnessFromX = getValueFromX;
 
+    // update the bar/marker and display text (without applying to light)
+    const updateBarPreview = (value) => {
       if (this.pendingUpdate) {
         cancelAnimationFrame(this.pendingUpdate);
       }
 
       this.pendingUpdate = requestAnimationFrame(() => {
-        if (brightness !== 0) {
-          const usableWidth = this.getUsableWidth();
-          const effectiveWidth = (Math.max(1, brightness) / 100) * usableWidth;
-          const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
-          barEl.style.width = `${totalWidth}px`;
-          if (percentageEl) percentageEl.textContent = `${roundedBrightness}%`;
-        } else {
-          const usableWidth = this.getUsableWidth();
-          const effectiveWidth = (1 / 100) * usableWidth;
-          const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
-          barEl.style.width = `${totalWidth}px`;
-          if (percentageEl) percentageEl.textContent = `1%`;
+        const usableWidth = this.getUsableWidth();
+        const markerEl = this.shadowRoot.querySelector(".color-marker");
+        const rightInfoEl = this.shadowRoot.querySelector(".right-info");
+        let percent, displayText, rightInfoBg;
+
+        switch (this._currentMode) {
+          case "color_temp":
+            percent = value / 100;
+            // Convert percentage to mireds for color calculation
+            const mireds = this.minMireds + ((100 - value) / 100) * (this.maxMireds - this.minMireds);
+            const kelvin = Math.round(1000000 / mireds);
+            displayText = `${kelvin}K`;
+            rightInfoBg = this._colorTempToRgb(mireds);
+            // Position the marker
+            const markerPosTemp = window.left_offset + percent * usableWidth;
+            markerEl.style.left = `${markerPosTemp}px`;
+            break;
+          case "rgb":
+            percent = value / 360;
+            displayText = `${Math.round(value)}°`;
+            // Convert hue to RGB for background
+            const [r, g, b] = this._hueToRgb(value);
+            rightInfoBg = `rgb(${r}, ${g}, ${b})`;
+            // Position the marker
+            const markerPosRgb = window.left_offset + percent * usableWidth;
+            markerEl.style.left = `${markerPosRgb}px`;
+            break;
+          default: // brightness
+            percent = (value - 1) / 99;
+            displayText = `${Math.round(value)}%`;
+            // Use bar width for brightness
+            const effectiveWidth = percent * usableWidth;
+            const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
+            barEl.style.width = `${totalWidth}px`;
+            // Keep current light color for brightness mode
+            rightInfoBg = null; // Don't change during brightness drag
         }
+
+        // Update right-info background during drag (only when show_value_bar is enabled)
+        if (rightInfoEl && rightInfoBg && this.config.show_value_bar) {
+          rightInfoEl.style.background = rightInfoBg;
+        }
+
+        if (percentageEl) percentageEl.textContent = displayText;
         this.pendingUpdate = null;
       });
     };
 
-    // apply actual brightness to the light (real-time)
+    // apply value to the entity based on current mode
     let updateTimeout;
-    const applyBrightness = (hass, entityId, brightness) => {
-      // timeout prevents too many rapid updates
+    const applyValue = (hass, entityId, value) => {
       clearTimeout(updateTimeout);
       updateTimeout = setTimeout(() => {
-        const b = parseFloat(brightness);
-        if (isNaN(b)) return;
-        const brightness255 = Math.round((b / 100) * 255);
-        const clampedBrightness = Math.max(0, Math.min(255, brightness255));
-        hass.callService("light", "turn_on", {
-          entity_id: entityId,
-          brightness: clampedBrightness
-        });
+        const v = parseFloat(value);
+        if (isNaN(v)) return;
+
+        switch (this._currentMode) {
+          case "color_temp":
+            // Convert percentage to mireds (inverted: 100% = warm/high mireds)
+            const mireds = Math.round(this.minMireds + ((100 - v) / 100) * (this.maxMireds - this.minMireds));
+            hass.callService("light", "turn_on", {
+              entity_id: entityId,
+              color_temp: mireds
+            });
+            break;
+          case "rgb":
+            // Convert hue to hs_color
+            hass.callService("light", "turn_on", {
+              entity_id: entityId,
+              hs_color: [v, 100] // hue, saturation at 100%
+            });
+            break;
+          default: // brightness/speed
+            if (this.isFanEntity) {
+              hass.callService("fan", "set_percentage", {
+                entity_id: entityId,
+                percentage: Math.max(0, Math.min(100, Math.round(v)))
+              });
+            } else {
+              const brightness255 = Math.round((v / 100) * 255);
+              hass.callService("light", "turn_on", {
+                entity_id: entityId,
+                brightness: Math.max(0, Math.min(255, brightness255))
+              });
+            }
+        }
       }, 125);
     };
 
+    // Legacy alias
+    const applyBrightness = applyValue;
+
+    // Track current value for dragging
+    let currentValue = brightnessPercent;
+
     // shared drag start logic
     const onDragStart = (clientX) => {
-      if (!this.supportsBrightness) {
+      // Get the currently controlled entity
+      const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+        ? this.config.secondary_entity
+        : this.config.entity;
+      const controlledStateObj = this._hass.states[controlledEntity];
+      const controlledState = controlledStateObj ? controlledStateObj.state : "unavailable";
+
+      // For non-dimmable entities (no brightness, color temp, or RGB support), toggle on click
+      if (!this.supportsBrightness && !this.supportsColorTemp && !this.supportsRgb) {
+        const domain = this.isFanEntity ? "fan" : "light";
+        hass.callService(domain, "toggle", { entity_id: controlledEntity });
         return;
       }
+
+      // For brightness mode, check if brightness is supported
+      if (this._currentMode === "brightness" && !this.supportsBrightness) {
+        return;
+      }
+      // For color_temp mode, check if color temp is supported
+      if (this._currentMode === "color_temp" && !this.supportsColorTemp) {
+        return;
+      }
+      // For rgb mode, check if RGB is supported
+      if (this._currentMode === "rgb" && !this.supportsRgb) {
+        return;
+      }
+
       this.isDragging = true;
 
       // start dragging
       this.startX = clientX;
-      this.startWidth = getBrightnessFromX(clientX);
 
-      // set brightness and bar to be at mouse X.
-      const brightness = this.startWidth;
-      updateBarPreview(brightness);
-      currentBrightness = brightness;
+      // slider_mode: "absolute" jumps to click position, "relative" starts from current value
+      const isRelativeMode = this.config.slider_mode === "relative";
 
-      if (state !== "on") {
-        const brightness255 = Math.round((brightness / 100) * 255);
-        hass.callService("light", "turn_on", {
-          entity_id: this.config.entity,
-          brightness: Math.max(1, brightness255)
-        });
+      if (isRelativeMode) {
+        // In relative mode, start from current value
+        this.startWidth = currentValue;
+      } else {
+        // In absolute mode (default), jump to click position
+        this.startWidth = getValueFromX(clientX);
+        // set value and bar to be at mouse X
+        const value = this.startWidth;
+        updateBarPreview(value);
+        currentValue = value;
+      }
+
+      // Turn on entity if it's off (unless slider_turns_on is false)
+      const sliderTurnsOn = this.config.slider_turns_on !== false;
+      if (controlledState !== "on" && sliderTurnsOn) {
+        const value = this.startWidth;
+        if (this._currentMode === "brightness") {
+          if (this.isFanEntity) {
+            hass.callService("fan", "turn_on", {
+              entity_id: controlledEntity,
+              percentage: Math.max(1, Math.round(value))
+            });
+          } else {
+            const brightness255 = Math.round((value / 100) * 255);
+            hass.callService("light", "turn_on", {
+              entity_id: controlledEntity,
+              brightness: Math.max(1, brightness255)
+            });
+          }
+        } else if (this._currentMode === "color_temp") {
+          const mireds = Math.round(this.minMireds + ((100 - value) / 100) * (this.maxMireds - this.minMireds));
+          hass.callService("light", "turn_on", {
+            entity_id: controlledEntity,
+            color_temp: mireds
+          });
+        } else if (this._currentMode === "rgb") {
+          hass.callService("light", "turn_on", {
+            entity_id: controlledEntity,
+            hs_color: [value, 100]
+          });
+        }
       }
 
       document.body.style.userSelect = "none";
@@ -793,12 +1447,24 @@ class CompactLightCard extends HTMLElement {
       }
 
       const dx = clientX - this.startX;
-      const rect = contentEl.getBoundingClientRect();
       const usableWidth = this.getUsableWidth();
-      const deltaPercent = (dx / usableWidth) * 100;
-      const newBrightness = Math.round(Math.max(1, Math.min(100, this.startWidth + deltaPercent)));
-      updateBarPreview(newBrightness);
-      currentBrightness = newBrightness;
+      const deltaPercent = (dx / usableWidth);
+
+      let newValue;
+      switch (this._currentMode) {
+        case "color_temp":
+          newValue = Math.round(Math.max(0, Math.min(100, this.startWidth + deltaPercent * 100)));
+          break;
+        case "rgb":
+          // Wrap hue around 0-360
+          newValue = Math.round((this.startWidth + deltaPercent * 360 + 360) % 360);
+          break;
+        default: // brightness
+          newValue = Math.round(Math.max(1, Math.min(100, this.startWidth + deltaPercent * 100)));
+      }
+
+      updateBarPreview(newValue);
+      currentValue = newValue;
     };
 
     // shared drag end logic
@@ -806,7 +1472,11 @@ class CompactLightCard extends HTMLElement {
       this.isDragging = false;
       document.body.style.userSelect = "";
       clearTimeout(updateTimeout);
-      applyBrightness(hass, entity, currentBrightness);
+      // Use the currently controlled entity
+      const controlledEntity = this._controllingSecondary && this.config.secondary_entity
+        ? this.config.secondary_entity
+        : this.config.entity;
+      applyValue(hass, controlledEntity, currentValue);
 
       // re-enable transition for smooth state updates
       if (barEl.style.transition === "none") {
@@ -814,84 +1484,52 @@ class CompactLightCard extends HTMLElement {
       }
     };
 
-    // mouse held down
-    this._mousedownHandler = (e) => {
-      e.preventDefault();
-      onDragStart(e.clientX);
-    };
-    brightnessEl.addEventListener("mousedown", this._mousedownHandler);
-
-    // mouse move
-    this._mousemoveHandler = (e) => {
-      if (!this.isDragging) return;
-      e.preventDefault();
-      onDragMove(e.clientX);
-    };
-    document.addEventListener("mousemove", this._mousemoveHandler);
-
-    // mouse up
-    this._mouseupHandler = () => {
-      if (!this.isDragging) return;
-      onDragEnd();
-    };
-    document.addEventListener("mouseup", this._mouseupHandler);
-
-    // touch start - don't start drag yet, wait for touchmove to detect scroll vs drag
-    this._touchstartHandler = (e) => {
-      // store initial touch position for scroll detection
-      this._initialTouchY = e.touches[0].clientY;
-      this._initialTouchX = e.touches[0].clientX;
-      this._touchStarted = true;
-      this._dragStartedFromTouch = false;
-    };
-    brightnessEl.addEventListener("touchstart", this._touchstartHandler);
-
-    // touch move
-    this._touchmoveHandler = (e) => {
-      // if drag hasn't started yet, check if this should be a drag or scroll
-      if (!this._dragStartedFromTouch && this._touchStarted) {
-        const currentTouchY = e.touches[0].clientY;
-        const currentTouchX = e.touches[0].clientX;
-        const deltaY = Math.abs(currentTouchY - this._initialTouchY);
-        const deltaX = Math.abs(currentTouchX - this._initialTouchX);
-        
-        // threshold for distinguishing between scroll and drag
-        const SCROLL_THRESHOLD = 10;
-        
-        // if vertical movement is significant, it's a scroll - allow browser to handle it
-        if (deltaY > SCROLL_THRESHOLD) {
-          this._touchStarted = false;
-          return; // don't preventDefault, allow normal scroll
-        }
-        
-        // if horizontal movement is significant, start drag
-        if (deltaX > SCROLL_THRESHOLD) {
-          this._dragStartedFromTouch = true;
-          e.preventDefault(); // now prevent default for drag
-          onDragStart(this._initialTouchX);
-        }
-      }
-      
-      // if drag is active, continue dragging
-      if (this._dragStartedFromTouch && this.isDragging) {
+    // Only add event listeners once to prevent lag from duplicate listeners
+    if (!this._listenersInitialized) {
+      // mouse held down
+      brightnessEl.addEventListener("mousedown", (e) => {
         e.preventDefault();
-        onDragMove(e.touches[0].clientX);
-      }
-    };
-    document.addEventListener("touchmove", this._touchmoveHandler, { passive: false });
+        onDragStart(e.clientX);
+      });
 
-    // touch end
-    this._touchendHandler = (e) => {
-      if (this._dragStartedFromTouch && this.isDragging) {
+      // mouse move
+      document.addEventListener("mousemove", (e) => {
+        if (!this.isDragging) return;
         e.preventDefault();
+        onDragMove(e.clientX);
+      });
+
+      // mouse up
+      document.addEventListener("mouseup", () => {
+        if (!this.isDragging) return;
         onDragEnd();
-      }
-      this._touchStarted = false;
-      this._dragStartedFromTouch = false;
-      this._initialTouchY = null;
-      this._initialTouchX = null;
-    };
-    document.addEventListener("touchend", this._touchendHandler);
+      });
+
+      // touch start
+      brightnessEl.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        onDragStart(touch.clientX);
+      });
+
+      // touch move
+      document.addEventListener("touchmove", (e) => {
+        if (!this.isDragging) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        onDragMove(touch.clientX);
+      }, { passive: false });
+
+      // touch end
+      document.addEventListener("touchend", (e) => {
+        if (!this.isDragging) return;
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        onDragEnd();
+      });
+
+      this._listenersInitialized = true;
+    }
 
   }
 
@@ -913,49 +1551,28 @@ class CompactLightCard extends HTMLElement {
     const haIconEl = root.querySelector("#main-icon");
     const contentEl = root.querySelector(".content");
 
-    // register icon click handler every time (state changes)
-    const newHaIconEl = haIconEl.cloneNode(true);
-    haIconEl.replaceWith(newHaIconEl);
-    newHaIconEl.style.pointerEvents = "auto"; // enable pointer events for clicking
-    newHaIconEl.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-
-      const entityId = this.config.entity;
-      const stateObj = this._hass.states[entityId];
-      if (!stateObj) return;
-
-      // toggle light
-      if (stateObj.state == "on") {
-        this._hass.callService("light", "turn_off", { entity_id: entityId });
-      } else {
-        this._hass.callService("light", "turn_on", { entity_id: entityId });
-      }
-    });
-
     // update name
     if (nameEl) nameEl.textContent = name;
-    // update displayed percentage
+    // update displayed percentage - only set if off/unavailable, otherwise _updateModeDisplay handles it
     if (!this.isDragging && percentageEl) {
       if (percentageText === "Off" || percentageText === "On" || percentageText === "Unavailable") {
         percentageEl.textContent = percentageText;
-      } else {
-        percentageEl.textContent = percentageText + "%";
       }
+      // When on, the value is set by _updateModeDisplay() based on current mode
     }
     // update icon
-    if (icon) {
-      newHaIconEl.setAttribute("icon", icon);
+    if (haIconEl && icon) {
+      haIconEl.setAttribute("icon", icon);
     }
-    // update bar width
-    // - the provided barWidth is just a % from 0-100%, must + 14px.
-    if (!this.isDragging && barEl) {
+    // update bar width (only in brightness mode)
+    // - the provided barWidth is a % from 0-100%, where 1% starts immediately right of the icon
+    if (!this.isDragging && barEl && this._currentMode === "brightness") {
       if (barWidth !== 0) {
-        const buffer = 4;
-        const contentStyle = getComputedStyle(contentEl);
-        const paddingRight = parseFloat(contentStyle.paddingRight);
-        const contentWidth = contentEl.clientWidth - buffer - paddingRight - window.left_offset;
-        const effectiveWidth = (barWidth / 100) * contentWidth;
-        const totalWidth = Math.min(effectiveWidth + window.left_offset, contentWidth + window.left_offset - 1); // + window.left_offset
+        const usableWidth = this.getUsableWidth();
+        // Map 1-100% to 0-usableWidth for the bar portion beyond the icon
+        const clampedWidth = Math.max(1, barWidth);
+        const effectiveWidth = ((clampedWidth - 1) / 99) * usableWidth;
+        const totalWidth = Math.min(effectiveWidth + window.left_offset, usableWidth + window.left_offset - 1);
         barEl.style.width = `${totalWidth}px`;
       } else {
         barEl.style.width = `0px`;
@@ -973,11 +1590,13 @@ class CompactLightCard extends HTMLElement {
       iconEl.classList.remove("no-border");
     }
     // add or remove border from card
-    // to do this, remove the padding front .content, and from .icon-background
+    // to do this, remove the padding from .content, and use card-border-colour for background
     if (!this.config.card_border) {
       contentEl.classList.add("no-border");
+      contentEl.classList.remove("with-card-border");
     } else {
       contentEl.classList.remove("no-border");
+      contentEl.classList.add("with-card-border");
     }
     // add glow effect if enabled and light is on
     const cardContainer = root.querySelector(".card-container");
@@ -1004,25 +1623,35 @@ class CompactLightCard extends HTMLElement {
 
     // apply colours with contrast consideration
     const haicon = root.querySelector(".haicon");
+
+    // determine icon background colour (custom or automatic)
+    const customIconBg = this.config.icon_background_colour;
+
     if (this.config.smart_font_colour) {
       if (percentageText === "Off" || percentageText === "Unavailable") {
         const offBgColour = getComputedStyle(this).getPropertyValue('--off-background-colour').trim();
-        const optimalTextColour = getTextColour(offBgColour);
-        iconEl.style.background = "var(--off-background-colour)";
+        const iconBgColour = customIconBg || offBgColour;
+        const optimalTextColour = getTextColour(iconBgColour);
+        iconEl.style.background = customIconBg || "var(--off-background-colour)";
         iconEl.style.color = optimalTextColour;
         haicon.style.color = optimalTextColour;
-        brightnessEl.style.background = "var(--off-background-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--off-background-colour)";
+        }
 
-        nameEl.style.color = optimalTextColour;
-        percentageEl.style.color = optimalTextColour;
-        root.querySelector(".arrow").style.color = optimalTextColour;
+        nameEl.style.color = getTextColour(offBgColour);
+        percentageEl.style.color = getTextColour(offBgColour);
+        root.querySelector(".arrow").style.color = getTextColour(offBgColour);
       } else {
         const lightPrimaryColour = primaryColour;
         const optimalPrimaryTextColour = getTextColour(lightPrimaryColour);
-        iconEl.style.background = "var(--light-secondary-colour)";
-        iconEl.style.color = "var(--light-primary-colour)";
-        haicon.style.color = "var(--light-primary-colour)";
-        brightnessEl.style.background = "var(--light-secondary-colour)";
+        const iconBgForText = customIconBg || lightPrimaryColour;
+        iconEl.style.background = customIconBg || "var(--light-secondary-colour)";
+        iconEl.style.color = customIconBg ? getTextColour(customIconBg) : "var(--light-primary-colour)";
+        haicon.style.color = customIconBg ? getTextColour(customIconBg) : "var(--light-primary-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--light-secondary-colour)";
+        }
 
         nameEl.style.color = optimalPrimaryTextColour;
         percentageEl.style.color = optimalPrimaryTextColour;
@@ -1031,19 +1660,23 @@ class CompactLightCard extends HTMLElement {
     }
     else {
       if (percentageText === "Off" || percentageText === "Unavailable") {
-        iconEl.style.background = "var(--off-background-colour)";
+        iconEl.style.background = customIconBg || "var(--off-background-colour)";
         iconEl.style.color = "var(--off-text-colour)";
         haicon.style.color = "var(--off-text-colour)";
-        brightnessEl.style.background = "var(--off-background-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--off-background-colour)";
+        }
 
         nameEl.style.color = "var(--off-text-colour)";
         percentageEl.style.color = "var(--off-text-colour)";
         root.querySelector(".arrow").style.color = "var(--off-text-colour)";
       } else {
-        iconEl.style.background = "var(--light-secondary-colour)";
+        iconEl.style.background = customIconBg || "var(--light-secondary-colour)";
         iconEl.style.color = "var(--light-primary-colour)";
         haicon.style.color = "var(--light-primary-colour)";
-        brightnessEl.style.background = "var(--light-secondary-colour)";
+        if (this._currentMode === "brightness") {
+          brightnessEl.style.background = "var(--light-secondary-colour)";
+        }
 
         nameEl.style.color = "var(--primary-text-color)";
         percentageEl.style.color = "var(--primary-text-color)";
@@ -1051,19 +1684,831 @@ class CompactLightCard extends HTMLElement {
       }
     }
 
-    // apply opacity
-    root.querySelector(".content").style.opacity = this.config.opacity;
-    root.querySelector(".icon").style.opacity = Math.max(Math.min(this.config.opacity * 1.5, 1), 0.3);
-    const shadowOpacity = 0.2 + (1 - this.config.opacity) * 0.4;
+    // Update right-info background based on state (only when show_value_bar is enabled)
+    const rightInfoEl = root.querySelector(".right-info");
+    if (rightInfoEl && this.config.show_value_bar) {
+      if (percentageText === "Off" || percentageText === "Unavailable") {
+        rightInfoEl.style.background = "var(--off-background-colour)";
+      } else {
+        // When on, use primary color (mode display will override if needed)
+        rightInfoEl.style.background = primaryColour || "var(--light-primary-colour)";
+      }
+    }
+
+    // apply opacity based on state (on/off) with separate icon and card control
+    const isOff = percentageText === "Off" || percentageText === "Unavailable";
+
+    // determine card opacity
+    let cardOpacity = this.config.opacity;
+    if (isOff && this.config.opacity_off !== null) {
+      cardOpacity = this.config.opacity_off;
+    } else if (!isOff && this.config.opacity_on !== null) {
+      cardOpacity = this.config.opacity_on;
+    }
+
+    // determine icon opacity
+    let iconOpacity = this.config.icon_opacity !== null ? this.config.icon_opacity : Math.max(Math.min(this.config.opacity * 1.5, 1), 0.3);
+    if (isOff && this.config.icon_opacity_off !== null) {
+      iconOpacity = this.config.icon_opacity_off;
+    } else if (!isOff && this.config.icon_opacity_on !== null) {
+      iconOpacity = this.config.icon_opacity_on;
+    }
+
+    root.querySelector(".content").style.opacity = cardOpacity;
+    root.querySelector(".icon").style.opacity = iconOpacity;
+    // Right-info follows same opacity as content when show_value_bar is enabled
+    if (this.config.show_value_bar) {
+      const rightInfo = root.querySelector(".right-info");
+      if (rightInfo) rightInfo.style.opacity = cardOpacity;
+    }
+
+    const shadowOpacity = 0.2 + (1 - cardOpacity) * 0.4;
     if (root.querySelector(".icon.no-border")) {
       root.querySelector(".icon.no-border").style.boxShadow = `rgba(0, 0, 0, ${shadowOpacity}) 0px 5px 15px`;
     }
     root.querySelector(".card").style.backdropFilter = `blur(${this.config.blur}px)`;
   }
 
+  _updateSecondaryIcon() {
+    const secondaryIconEl = this.shadowRoot.querySelector("#secondary-icon");
+    if (!secondaryIconEl) return;
+
+    const secondaryEntity = this.config.secondary_entity;
+    const showSecondaryIcon = this.config.show_secondary_icon === true;
+
+    // Hide if no secondary entity configured or explicitly hidden
+    if (!secondaryEntity || !showSecondaryIcon) {
+      secondaryIconEl.classList.add("hidden");
+      return;
+    }
+
+    // When swapped, show the primary entity icon; otherwise show secondary entity icon
+    const entityToShow = this._controllingSecondary
+      ? this.config.entity
+      : secondaryEntity;
+
+    const stateObj = this._hass.states[entityToShow];
+    if (!stateObj) {
+      secondaryIconEl.classList.add("hidden");
+      return;
+    }
+
+    // Show the icon
+    secondaryIconEl.classList.remove("hidden");
+
+    // Set appropriate icon based on entity type
+    const domain = entityToShow.split(".")[0];
+    let icon;
+    if (this._controllingSecondary) {
+      // When swapped, show the configured primary icon
+      icon = this.config.icon || stateObj.attributes.icon || "mdi:lightbulb";
+    } else {
+      // Show secondary entity icon based on its type
+      if (domain === "light") icon = stateObj.attributes.icon || "mdi:lightbulb";
+      else if (domain === "switch") icon = stateObj.attributes.icon || "mdi:power";
+      else if (domain === "fan") icon = stateObj.attributes.icon || "mdi:fan";
+      else icon = stateObj.attributes.icon || "mdi:lightbulb";
+    }
+    secondaryIconEl.setAttribute("icon", icon);
+
+    // Update on/off state
+    if (stateObj.state === "on") {
+      secondaryIconEl.classList.add("on");
+    } else {
+      secondaryIconEl.classList.remove("on");
+    }
+
+    // Show swapped indicator when controlling secondary entity
+    if (this._controllingSecondary) {
+      secondaryIconEl.classList.add("swapped");
+    } else {
+      secondaryIconEl.classList.remove("swapped");
+    }
+  }
+
+  static getConfigElement() {
+    return document.createElement("compact-light-card-editor");
+  }
 }
 
-// register card
+// Visual Editor for the card
+class CompactLightCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = {};
+    this._hass = null;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    // Update pickers if they exist
+    const entitySelector = this.shadowRoot?.querySelector("ha-selector#entity");
+    if (entitySelector) entitySelector.hass = hass;
+    const secondarySelector = this.shadowRoot?.querySelector("ha-selector#secondary_entity");
+    if (secondarySelector) secondarySelector.hass = hass;
+    const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
+    if (iconPicker) iconPicker.hass = hass;
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    this.render();
+  }
+
+  _hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : null;
+  }
+
+  _rgbToHex(r, g, b) {
+    return "#" + [r, g, b].map(x => {
+      const hex = parseInt(x).toString(16);
+      return hex.length === 1 ? "0" + hex : hex;
+    }).join("");
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+
+    // Helper to get colour value for color input (needs to be hex)
+    // Returns grey (#808080) when not set
+    const getColorValue = (value) => {
+      if (!value) return "#808080";
+      if (value.startsWith("#")) return value;
+      if (value.startsWith("rgb")) {
+        const match = value.match(/(\d+),\s*(\d+),\s*(\d+)/);
+        if (match) return this._rgbToHex(match[1], match[2], match[3]);
+      }
+      return "#808080";
+    };
+
+    // Helper to check if colour is set
+    const isColorSet = (value) => !!value;
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        .editor {
+          padding: 16px;
+        }
+        .section {
+          margin-bottom: 24px;
+          border-bottom: 1px solid var(--divider-color, #e0e0e0);
+          padding-bottom: 16px;
+        }
+        .section:last-child {
+          border-bottom: none;
+        }
+        .section-title {
+          font-weight: bold;
+          font-size: 14px;
+          margin-bottom: 12px;
+          color: var(--primary-text-color);
+        }
+        .row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          gap: 12px;
+        }
+        .row label {
+          min-width: 140px;
+          font-size: 14px;
+          color: var(--primary-text-color);
+        }
+        .row .input-container {
+          flex: 1;
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+        .row input[type="text"],
+        .row input[type="number"] {
+          flex: 1;
+          padding: 8px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 4px;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color);
+          font-size: 14px;
+        }
+        .color-picker-wrapper {
+          position: relative;
+          width: 40px;
+          height: 36px;
+          flex-shrink: 0;
+        }
+        .color-picker-wrapper.not-set::after {
+          content: "✕";
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: #d32f2f;
+          font-size: 18px;
+          font-weight: bold;
+          pointer-events: none;
+          text-shadow: 0 0 2px white;
+        }
+        .row input[type="color"] {
+          width: 40px;
+          height: 36px;
+          padding: 2px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 4px;
+          cursor: pointer;
+        }
+        .row input[type="checkbox"] {
+          width: 20px;
+          height: 20px;
+        }
+        .row select {
+          flex: 1;
+          padding: 8px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 4px;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color);
+          font-size: 14px;
+        }
+        ha-selector, ha-icon-picker {
+          flex: 1;
+        }
+        .opacity-control {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .opacity-control input[type="range"] {
+          flex: 1;
+          height: 6px;
+          -webkit-appearance: none;
+          appearance: none;
+          background: linear-gradient(to right, transparent, var(--primary-color, #03a9f4));
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        .opacity-control input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          background: var(--primary-color, #03a9f4);
+          border-radius: 50%;
+          cursor: pointer;
+        }
+        .opacity-control input[type="number"] {
+          width: 55px;
+          flex: none;
+          padding: 6px;
+          text-align: center;
+          font-size: 13px;
+        }
+        .opacity-preview {
+          width: 32px;
+          height: 32px;
+          border-radius: 4px;
+          background: linear-gradient(135deg, var(--primary-color, #03a9f4) 50%, var(--secondary-background-color, #e0e0e0) 50%);
+          border: 1px solid var(--divider-color, #ccc);
+          flex-shrink: 0;
+        }
+        .subsection {
+          margin-left: 16px;
+          padding-left: 16px;
+          border-left: 2px solid var(--divider-color, #e0e0e0);
+          margin-top: 8px;
+        }
+        .subsection-title {
+          font-size: 12px;
+          color: var(--secondary-text-color);
+          margin-bottom: 8px;
+        }
+      </style>
+      <div class="editor">
+        <div class="section">
+          <div class="section-title">Basic Settings</div>
+          <div class="row">
+            <label>Entity *</label>
+            <ha-selector id="entity"></ha-selector>
+          </div>
+          <div class="row">
+            <label>Name</label>
+            <input type="text" id="name" value="${this._config.name || ""}" placeholder="Optional display name">
+          </div>
+          <div class="row">
+            <label>Icon</label>
+            <ha-icon-picker id="icon"></ha-icon-picker>
+          </div>
+          <div class="row">
+            <label>Secondary Entity</label>
+            <ha-selector id="secondary_entity"></ha-selector>
+          </div>
+          <div class="row">
+            <label>Show Secondary Icon</label>
+            <input type="checkbox" id="show_secondary_icon" ${this._config.show_secondary_icon === true ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Secondary Icon Action</label>
+            <select id="secondary_icon_action">
+              <option value="toggle" ${(this._config.secondary_icon_action || "toggle") === "toggle" ? "selected" : ""}>Toggle On/Off</option>
+              <option value="swap" ${this._config.secondary_icon_action === "swap" ? "selected" : ""}>Swap Controls</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Appearance</div>
+          <div class="row">
+            <label>Height (px)</label>
+            <input type="number" id="height" value="${this._config.height || 64}" min="30" max="150">
+          </div>
+          <div class="row">
+            <label>Font Size (px)</label>
+            <input type="number" id="font_size" value="${this._config.font_size || 18}" min="8" max="36">
+          </div>
+          <div class="row">
+            <label>Primary Colour</label>
+            <div class="input-container">
+              <div class="color-picker-wrapper ${isColorSet(this._config.primary_colour) ? '' : 'not-set'}">
+                <input type="color" id="primary_colour_picker" value="${getColorValue(this._config.primary_colour)}">
+              </div>
+              <input type="text" id="primary_colour" value="${this._config.primary_colour || ""}" placeholder="Auto">
+            </div>
+          </div>
+          <div class="row">
+            <label>Secondary Colour</label>
+            <div class="input-container">
+              <div class="color-picker-wrapper ${isColorSet(this._config.secondary_colour) ? '' : 'not-set'}">
+                <input type="color" id="secondary_colour_picker" value="${getColorValue(this._config.secondary_colour)}">
+              </div>
+              <input type="text" id="secondary_colour" value="${this._config.secondary_colour || ""}" placeholder="Auto">
+            </div>
+          </div>
+          <div class="row">
+            <label>Glow Effect</label>
+            <input type="checkbox" id="glow" ${this._config.glow !== false ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Smart Font Colour</label>
+            <input type="checkbox" id="smart_font_colour" ${this._config.smart_font_colour !== false ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Show Value Bar</label>
+            <input type="checkbox" id="show_value_bar" ${this._config.show_value_bar ? "checked" : ""}>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Off State Colours</div>
+          <div class="row">
+            <label>Background Colour</label>
+            <div class="input-container">
+              <div class="color-picker-wrapper ${isColorSet(this._config.off_colours?.background) ? '' : 'not-set'}">
+                <input type="color" id="off_background_picker" value="${getColorValue(this._config.off_colours?.background)}">
+              </div>
+              <input type="text" id="off_background" value="${this._config.off_colours?.background || ""}" placeholder="Auto">
+            </div>
+          </div>
+          <div class="row">
+            <label>Text Colour</label>
+            <div class="input-container">
+              <div class="color-picker-wrapper ${isColorSet(this._config.off_colours?.text) ? '' : 'not-set'}">
+                <input type="color" id="off_text_picker" value="${getColorValue(this._config.off_colours?.text)}">
+              </div>
+              <input type="text" id="off_text" value="${this._config.off_colours?.text || ""}" placeholder="Auto">
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Icon & Card Borders</div>
+          <div class="row">
+            <label>Icon Background Colour</label>
+            <div class="input-container">
+              <div class="color-picker-wrapper ${isColorSet(this._config.icon_background_colour) ? '' : 'not-set'}">
+                <input type="color" id="icon_background_colour_picker" value="${getColorValue(this._config.icon_background_colour)}">
+              </div>
+              <input type="text" id="icon_background_colour" value="${this._config.icon_background_colour || ""}" placeholder="Auto">
+            </div>
+          </div>
+          <div class="row">
+            <label>Icon Border</label>
+            <input type="checkbox" id="icon_border" ${this._config.icon_border ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Icon Border Colour</label>
+            <div class="input-container">
+              <div class="color-picker-wrapper ${isColorSet(this._config.icon_border_colour) ? '' : 'not-set'}">
+                <input type="color" id="icon_border_colour_picker" value="${getColorValue(this._config.icon_border_colour)}">
+              </div>
+              <input type="text" id="icon_border_colour" value="${this._config.icon_border_colour || ""}" placeholder="Auto">
+            </div>
+          </div>
+          <div class="row">
+            <label>Card Border</label>
+            <input type="checkbox" id="card_border" ${this._config.card_border ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Card Border Colour</label>
+            <div class="input-container">
+              <div class="color-picker-wrapper ${isColorSet(this._config.card_border_colour) ? '' : 'not-set'}">
+                <input type="color" id="card_border_colour_picker" value="${getColorValue(this._config.card_border_colour)}">
+              </div>
+              <input type="text" id="card_border_colour" value="${this._config.card_border_colour || ""}" placeholder="Auto">
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Opacity & Blur</div>
+          <div class="row opacity-row">
+            <label>Default Opacity</label>
+            <div class="opacity-control">
+              <input type="range" id="opacity_slider" value="${this._config.opacity !== undefined ? this._config.opacity : 1}" min="0" max="1" step="0.05">
+              <input type="number" id="opacity" value="${this._config.opacity !== undefined ? this._config.opacity : 1}" min="0" max="1" step="0.05">
+              <div class="opacity-preview" id="opacity_preview" style="opacity: ${this._config.opacity !== undefined ? this._config.opacity : 1}"></div>
+            </div>
+          </div>
+          <div class="row opacity-row">
+            <label>Opacity When On</label>
+            <div class="opacity-control">
+              <input type="range" id="opacity_on_slider" value="${this._config.opacity_on || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="opacity_on" value="${this._config.opacity_on || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="opacity_on_preview" style="opacity: ${this._config.opacity_on || 1}"></div>
+            </div>
+          </div>
+          <div class="row opacity-row">
+            <label>Opacity When Off</label>
+            <div class="opacity-control">
+              <input type="range" id="opacity_off_slider" value="${this._config.opacity_off || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="opacity_off" value="${this._config.opacity_off || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="opacity_off_preview" style="opacity: ${this._config.opacity_off || 1}"></div>
+            </div>
+          </div>
+          <div class="row opacity-row">
+            <label>Icon Opacity</label>
+            <div class="opacity-control">
+              <input type="range" id="icon_opacity_slider" value="${this._config.icon_opacity || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="icon_opacity" value="${this._config.icon_opacity || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="icon_opacity_preview" style="opacity: ${this._config.icon_opacity || 1}"></div>
+            </div>
+          </div>
+          <div class="row opacity-row">
+            <label>Icon Opacity When On</label>
+            <div class="opacity-control">
+              <input type="range" id="icon_opacity_on_slider" value="${this._config.icon_opacity_on || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="icon_opacity_on" value="${this._config.icon_opacity_on || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="icon_opacity_on_preview" style="opacity: ${this._config.icon_opacity_on || 1}"></div>
+            </div>
+          </div>
+          <div class="row opacity-row">
+            <label>Icon Opacity When Off</label>
+            <div class="opacity-control">
+              <input type="range" id="icon_opacity_off_slider" value="${this._config.icon_opacity_off || 1}" min="0" max="1" step="0.05">
+              <input type="number" id="icon_opacity_off" value="${this._config.icon_opacity_off || ""}" min="0" max="1" step="0.05" placeholder="—">
+              <div class="opacity-preview" id="icon_opacity_off_preview" style="opacity: ${this._config.icon_opacity_off || 1}"></div>
+            </div>
+          </div>
+          <div class="row">
+            <label>Blur</label>
+            <input type="number" id="blur" value="${this._config.blur || 0}" min="0" max="10" step="1">
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Icon Tap Behaviour</div>
+          <div class="row">
+            <label>Tap icon for specific brightness</label>
+            <input type="checkbox" id="icon_tap_to_brightness" ${this._config.icon_tap_to_brightness ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Turn On Brightness (%)</label>
+            <input type="number" id="turn_on_brightness" value="${this._config.turn_on_brightness || 100}" min="1" max="100">
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Slider Behaviour</div>
+          <div class="row">
+            <label>Slider Mode</label>
+            <select id="slider_mode">
+              <option value="absolute" ${this._config.slider_mode !== "relative" ? "selected" : ""}>Absolute (jump to tap)</option>
+              <option value="relative" ${this._config.slider_mode === "relative" ? "selected" : ""}>Relative (drag from current)</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Slider Turns On Light</label>
+            <input type="checkbox" id="slider_turns_on" ${this._config.slider_turns_on !== false ? "checked" : ""}>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Color Mode Controls</div>
+          <div class="row">
+            <label>Show Color Temp Button</label>
+            <input type="checkbox" id="show_color_temp_button" ${this._config.show_color_temp_button !== false ? "checked" : ""}>
+          </div>
+          <div class="row">
+            <label>Show RGB/Color Button</label>
+            <input type="checkbox" id="show_rgb_button" ${this._config.show_rgb_button !== false ? "checked" : ""}>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Chevron Actions</div>
+          <div class="row">
+            <label>Tap Action</label>
+            <select id="chevron_action">
+              <option value="more-info" ${(!this._config.chevron_action || this._config.chevron_action?.action === "more-info") ? "selected" : ""}>More Info</option>
+              <option value="toggle" ${this._config.chevron_action?.action === "toggle" ? "selected" : ""}>Toggle</option>
+              <option value="none" ${this._config.chevron_action?.action === "none" ? "selected" : ""}>None</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Hold Action</label>
+            <select id="chevron_hold_action">
+              <option value="" ${!this._config.chevron_hold_action ? "selected" : ""}>None</option>
+              <option value="more-info" ${this._config.chevron_hold_action?.action === "more-info" ? "selected" : ""}>More Info</option>
+              <option value="toggle" ${this._config.chevron_hold_action?.action === "toggle" ? "selected" : ""}>Toggle</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Double Tap Action</label>
+            <select id="chevron_double_tap_action">
+              <option value="" ${!this._config.chevron_double_tap_action ? "selected" : ""}>None</option>
+              <option value="more-info" ${this._config.chevron_double_tap_action?.action === "more-info" ? "selected" : ""}>More Info</option>
+              <option value="toggle" ${this._config.chevron_double_tap_action?.action === "toggle" ? "selected" : ""}>Toggle</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Setup HA pickers
+    this._setupHaPickers();
+
+    // Add event listeners
+    this._setupEventListeners();
+  }
+
+  _setupHaPickers() {
+    // Entity selector
+    const entitySelector = this.shadowRoot.querySelector("ha-selector#entity");
+    if (entitySelector) {
+      entitySelector.hass = this._hass;
+      entitySelector.selector = { entity: { domain: ["light", "fan"] } };
+      entitySelector.value = this._config.entity || "";
+      entitySelector.addEventListener("value-changed", (e) => {
+        this._config.entity = e.detail.value;
+        this._fireConfigChanged();
+      });
+    }
+
+    // Icon picker
+    const iconPicker = this.shadowRoot.querySelector("ha-icon-picker");
+    if (iconPicker) {
+      iconPicker.hass = this._hass;
+      iconPicker.value = this._config.icon || "mdi:lightbulb";
+      iconPicker.addEventListener("value-changed", (e) => {
+        if (e.detail.value) {
+          this._config.icon = e.detail.value;
+        } else {
+          delete this._config.icon;
+        }
+        this._fireConfigChanged();
+      });
+    }
+
+    // Secondary entity selector
+    const secondarySelector = this.shadowRoot.querySelector("ha-selector#secondary_entity");
+    if (secondarySelector) {
+      secondarySelector.hass = this._hass;
+      secondarySelector.selector = { entity: { domain: ["light", "fan", "switch"] } };
+      secondarySelector.value = this._config.secondary_entity || "";
+      secondarySelector.addEventListener("value-changed", (e) => {
+        if (e.detail.value) {
+          this._config.secondary_entity = e.detail.value;
+        } else {
+          delete this._config.secondary_entity;
+        }
+        this._fireConfigChanged();
+      });
+    }
+  }
+
+  _setupEventListeners() {
+    // Color picker and text input pairs
+    const colorPairs = [
+      ["primary_colour_picker", "primary_colour"],
+      ["secondary_colour_picker", "secondary_colour"],
+      ["off_background_picker", "off_background"],
+      ["off_text_picker", "off_text"],
+      ["icon_background_colour_picker", "icon_background_colour"],
+      ["icon_border_colour_picker", "icon_border_colour"],
+      ["card_border_colour_picker", "card_border_colour"],
+    ];
+
+    const colorTextIds = colorPairs.map(([_, textId]) => textId);
+
+    colorPairs.forEach(([pickerId, textId]) => {
+      const picker = this.shadowRoot.getElementById(pickerId);
+      const text = this.shadowRoot.getElementById(textId);
+      const wrapper = picker?.parentElement;
+
+      if (picker && text) {
+        // Color picker changes -> update text and save
+        picker.addEventListener("input", (e) => {
+          text.value = e.target.value;
+          // Update wrapper to remove not-set indicator
+          if (wrapper) wrapper.classList.remove("not-set");
+        });
+        picker.addEventListener("change", (e) => {
+          text.value = e.target.value;
+          if (wrapper) wrapper.classList.remove("not-set");
+          this._handleColorChange(textId, e.target.value);
+        });
+
+        // Text input changes -> update picker visually on input, save on change
+        text.addEventListener("input", (e) => {
+          const val = e.target.value;
+          // Update picker if it's a valid hex color
+          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+            picker.value = val;
+            if (wrapper) wrapper.classList.remove("not-set");
+          } else if (val === "") {
+            picker.value = "#808080";
+            if (wrapper) wrapper.classList.add("not-set");
+          }
+          // Don't fire config change here - wait for blur/enter
+        });
+        text.addEventListener("change", (e) => {
+          const val = e.target.value;
+          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+            picker.value = val;
+            if (wrapper) wrapper.classList.remove("not-set");
+          } else if (val === "") {
+            picker.value = "#808080";
+            if (wrapper) wrapper.classList.add("not-set");
+          }
+          this._handleColorChange(textId, val || undefined);
+        });
+      }
+    });
+
+    // Opacity slider sync with number inputs and preview
+    const opacityFields = ["opacity", "opacity_on", "opacity_off", "icon_opacity", "icon_opacity_on", "icon_opacity_off"];
+    opacityFields.forEach((fieldId) => {
+      const slider = this.shadowRoot.getElementById(`${fieldId}_slider`);
+      const numberInput = this.shadowRoot.getElementById(fieldId);
+      const preview = this.shadowRoot.getElementById(`${fieldId}_preview`);
+
+      if (slider && numberInput) {
+        // Slider changes -> update number input and preview
+        slider.addEventListener("input", (e) => {
+          const val = parseFloat(e.target.value);
+          numberInput.value = val;
+          if (preview) preview.style.opacity = val;
+        });
+        slider.addEventListener("change", (e) => {
+          const val = parseFloat(e.target.value);
+          numberInput.value = val;
+          if (preview) preview.style.opacity = val;
+          this._handleOpacityChange(fieldId, val);
+        });
+
+        // Number input changes -> update slider and preview visually, save on change only
+        numberInput.addEventListener("input", (e) => {
+          const val = e.target.value === "" ? null : parseFloat(e.target.value);
+          if (val !== null && !isNaN(val)) {
+            slider.value = val;
+            if (preview) preview.style.opacity = val;
+          }
+          // Don't fire config change here - wait for blur/enter
+        });
+        numberInput.addEventListener("change", (e) => {
+          const val = e.target.value === "" ? null : parseFloat(e.target.value);
+          if (val !== null && !isNaN(val)) {
+            slider.value = val;
+            if (preview) preview.style.opacity = val;
+          }
+          this._handleOpacityChange(fieldId, val);
+        });
+      }
+    });
+
+    // Standard inputs - only fire on change (blur/enter), NOT on input
+    this.shadowRoot.querySelectorAll("input:not([type='color']):not([type='range']), select").forEach((input) => {
+      // Skip inputs handled above
+      if (opacityFields.includes(input.id) || colorTextIds.includes(input.id)) return;
+
+      // Only fire on change event (blur or enter), not on every keystroke
+      input.addEventListener("change", (e) => this._valueChanged(e));
+    });
+  }
+
+  _handleOpacityChange(fieldId, value) {
+    if (value === null || value === undefined) {
+      delete this._config[fieldId];
+    } else {
+      this._config[fieldId] = value;
+    }
+    this._fireConfigChanged();
+  }
+
+  _handleColorChange(id, value) {
+    if (id === "off_background" || id === "off_text") {
+      const field = id === "off_background" ? "background" : "text";
+      if (!this._config.off_colours) {
+        this._config.off_colours = {};
+      }
+      if (value) {
+        this._config.off_colours[field] = value;
+      } else {
+        delete this._config.off_colours[field];
+        if (Object.keys(this._config.off_colours).length === 0) {
+          delete this._config.off_colours;
+        }
+      }
+    } else {
+      if (value) {
+        this._config[id] = value;
+      } else {
+        delete this._config[id];
+      }
+    }
+    this._fireConfigChanged();
+  }
+
+  _valueChanged(ev) {
+    if (!this._config) return;
+
+    const target = ev.target;
+    const id = target.id;
+    let value;
+
+    if (target.type === "checkbox") {
+      value = target.checked;
+    } else if (target.type === "number") {
+      value = target.value === "" ? undefined : parseFloat(target.value);
+    } else if (target.tagName === "SELECT") {
+      value = target.value || undefined;
+    } else {
+      value = target.value || undefined;
+    }
+
+    // Handle special cases
+    // These options default to true, so delete when true (only store false)
+    if (id === "glow" || id === "smart_font_colour" || id === "slider_turns_on") {
+      if (value === true) {
+        delete this._config[id];
+      } else {
+        this._config[id] = value;
+      }
+    } else if (id === "show_secondary_icon") {
+      // show_secondary_icon defaults to false, so delete when false (only store true)
+      if (value === true) {
+        this._config[id] = true;
+      } else {
+        delete this._config[id];
+      }
+    } else if (id === "slider_mode") {
+      // slider_mode default is "absolute", only store if "relative"
+      if (value === "relative") {
+        this._config.slider_mode = value;
+      } else {
+        delete this._config.slider_mode;
+      }
+    } else if (id === "off_background" || id === "off_text") {
+      this._handleColorChange(id, value);
+      return;
+    } else if (id === "chevron_action" || id === "chevron_hold_action" || id === "chevron_double_tap_action") {
+      if (value && value !== "") {
+        this._config[id] = { action: value };
+      } else {
+        delete this._config[id];
+      }
+    } else if (value === undefined || value === "") {
+      delete this._config[id];
+    } else {
+      this._config[id] = value;
+    }
+
+    this._fireConfigChanged();
+  }
+
+  _fireConfigChanged() {
+    const event = new CustomEvent("config-changed", {
+      detail: { config: this._config },
+      bubbles: true,
+      composed: true,
+    });
+    this.dispatchEvent(event);
+  }
+}
+
+// register card and editor
+customElements.define("compact-light-card-editor", CompactLightCardEditor);
 customElements.define('compact-light-card', CompactLightCard);
 
 // make it appear in visual card picker
