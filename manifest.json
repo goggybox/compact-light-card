@@ -2,7 +2,7 @@
   "domain": "compact_light_card",
   "name": "Compact Light Card",
   "documentation": "https://github.com/goggybox/compact-light-card",
-  "version": "0.1.0",
+  "version": "0.7.0-beta.1",
   "dependencies": [],
   "codeowners": ["@goggybox"],
   "requirements": []
