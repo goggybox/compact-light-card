@@ -20,7 +20,7 @@
 // Please keep this header comment in all copies of the program.
 // --------------------------------------------------------------------
 
-console.log("compact-light-card.js v0.7.02 loaded!");
+console.log("compact-light-card.js v0.7.0-beta.1 loaded! GPL-3.0 © goggybox (2026)");
 window.left_offset = 66;
 
 class CompactLightCard extends HTMLElement {
