@@ -183,8 +183,9 @@ Alternatively:
 - Click download!
 
 ## Contributors
-[@berkayopak](https://github.com/berkayopak)
-[@lewisburgess](https://github.com/lewisburgess)
+Thank you to the following users for making this project even better:
+- [@berkayopak](https://github.com/berkayopak)
+- [@lewisburgess](https://github.com/lewisburgess)
 
 ## License
 GPLv3.0 © [goggybox](https://github.com/goggybox), [berkayopak](https://github.com/berkayopak), [lewisburgess](https://github.com/lewisburgess)
