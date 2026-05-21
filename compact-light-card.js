@@ -466,8 +466,9 @@ class CompactLightCard extends HTMLElement {
       : this.config.entity;
     const stateObj = this._hass.states[entity];
 
-    // Detect if this is a fan entity
+    // Detect entity domain
     this.isFanEntity = entity.startsWith("fan.");
+    this.isSwitchEntity = entity.startsWith("switch.");
 
     // ensure entity exists and is connected
     if (!stateObj) {
@@ -477,21 +478,29 @@ class CompactLightCard extends HTMLElement {
         brightnessPercent: 0,
         primaryColour: "#9e9e9e",
         secondaryColour: "#e0e0e0",
-        icon: this.isFanEntity ? "mdi:fan" : "mdi:alert",
+        icon: this.isFanEntity ? "mdi:fan" : this.isSwitchEntity ? "mdi:toggle-switch" : "mdi:alert",
       };
     }
 
     const state = stateObj.state;
-    const entityType = this.isFanEntity ? "fan" : "light";
+    const entityType = this.isFanEntity ? "fan" : this.isSwitchEntity ? "switch" : "light";
     const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace(`${entityType}.`, "");
     const friendlyName = tempName.length > 30 ? tempName.slice(0, 30) + "..." : tempName;
 
-    // For fans, check percentage support; for lights, check brightness support
+    // For fans, check percentage support; for lights, check brightness support; switches have none
     if (this.isFanEntity) {
       this.supportsBrightness = stateObj.attributes.percentage !== undefined ||
                                  (stateObj.attributes.supported_features & 1);
+    } else if (this.isSwitchEntity) {
+      this.supportsBrightness = false;
     } else {
-      this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);
+      const supportedColorModes = stateObj.attributes.supported_color_modes;
+      if (supportedColorModes && supportedColorModes.length > 0) {
+        const NO_BRIGHTNESS_MODES = ['onoff', 'unknown'];
+        this.supportsBrightness = supportedColorModes.some(m => !NO_BRIGHTNESS_MODES.includes(m));
+      } else {
+        this.supportsBrightness = !!(stateObj.attributes.supported_features & 1);
+      }
     }
 
 
@@ -502,6 +511,9 @@ class CompactLightCard extends HTMLElement {
       if (this.isFanEntity) {
         // Fan uses percentage directly (0-100)
         brightnessPercent = stateObj.attributes.percentage || 100;
+      } else if (this.isSwitchEntity) {
+        // switch is simply on or off - show full bar
+        brightnessPercent = 100;
       } else {
         // Light uses brightness (0-255)
         const brightness = stateObj.attributes.brightness || 255;
@@ -542,6 +554,8 @@ class CompactLightCard extends HTMLElement {
       // Use appropriate icon for the secondary entity type
       if (this.isFanEntity) {
         icon = stateObj.attributes.icon || "mdi:fan";
+      } else if (this.isSwitchEntity) {
+        icon = stateObj.attributes.icon || "mdi:toggle-switch";
       } else {
         icon = stateObj.attributes.icon || "mdi:lightbulb";
       }
@@ -598,7 +612,7 @@ class CompactLightCard extends HTMLElement {
         break;
 
       case "toggle":
-        const domain = this.isFanEntity ? "fan" : "light";
+        const domain = this.isFanEntity ? "fan" : this.isSwitchEntity ? "switch" : "light";
         this._hass.callService(domain, "toggle", {
           entity_id: entityId
         });
@@ -738,14 +752,16 @@ class CompactLightCard extends HTMLElement {
         if (!stateObj) return;
 
         const isFan = entityId.startsWith("fan.");
-        const domain = isFan ? "fan" : "light";
+        const isSwitch = entityId.startsWith("switch.");
+        const domain = isFan ? "fan" : isSwitch ? "switch" : "light";
 
         // toggle entity
         if (stateObj.state == "on") {
           this._hass.callService(domain, "turn_off", { entity_id: entityId });
         } else {
           // turn on - use configured brightness/percentage if icon_tap_to_brightness is enabled
-          if (this.config.icon_tap_to_brightness) {
+          // (switches have no brightness, so always use plain turn_on)
+          if (this.config.icon_tap_to_brightness && !isSwitch) {
             if (isFan) {
               this._hass.callService("fan", "turn_on", {
                 entity_id: entityId,
@@ -924,7 +940,7 @@ class CompactLightCard extends HTMLElement {
 
       if (!stateObj || stateObj.state !== "on") return;
 
-      if (!this.isDragging && percentageEl) {
+      if (!this.isDragging && percentageEl && this.supportsBrightness) {
         percentageEl.textContent = `${brightnessPercent}%`;
       }
 
@@ -981,7 +997,7 @@ class CompactLightCard extends HTMLElement {
 
       // For non-dimmable entities (no brightness support), toggle on click
       if (!this.supportsBrightness) {
-        const domain = this.isFanEntity ? "fan" : "light";
+        const domain = this.isFanEntity ? "fan" : this.isSwitchEntity ? "switch" : "light";
         this._hass.callService(domain, "toggle", { entity_id: controlledEntity });
         return;
       }
@@ -1012,6 +1028,8 @@ class CompactLightCard extends HTMLElement {
             entity_id: controlledEntity,
             percentage: Math.max(1, Math.round(value))
           });
+        } else if (this.isSwitchEntity) {
+          this._hass.callService("switch", "turn_on", { entity_id: controlledEntity });
         } else {
           const brightness255 = Math.round((value / 100) * 255);
           this._hass.callService("light", "turn_on", {
@@ -1067,7 +1085,8 @@ class CompactLightCard extends HTMLElement {
           entity_id: controlledEntity,
           percentage: Math.max(0, Math.min(100, Math.round(finalValue)))
         });
-      } else {
+      } else if (!this.isSwitchEntity) {
+        // Switches have no brightness — drag end is a no-op for them
         const brightness255 = Math.round((finalValue / 100) * 255);
         hass.callService("light", "turn_on", {
           entity_id: controlledEntity,
@@ -1386,6 +1405,7 @@ class CompactLightCardEditor extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._config = {};
     this._hass = null;
+    this._rendered = false;
   }
 
   set hass(hass) {
@@ -1393,7 +1413,7 @@ class CompactLightCardEditor extends HTMLElement {
     // Update pickers if they exist
     const entitySelector = this.shadowRoot?.querySelector("ha-selector#entity");
     if (entitySelector) entitySelector.hass = hass;
-const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
+    const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
     if (iconPicker) iconPicker.hass = hass;
   }
 
@@ -1403,6 +1423,8 @@ const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
       this.render();
       this._rendered = true;
     }
+    // If already rendered, this._config is updated above.
+    // Skipping render() prevents the DOM rebuild that causes scroll jumps.
   }
 
   _hexToRgb(hex) {
@@ -1418,7 +1440,7 @@ const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
   }
 
   render() {
-    this._rendered = false;
+    this._rendered = false; // reset so flag stays accurate during rebuild
     if (!this.shadowRoot) return;
 
     // Helper to get colour value for color input (needs to be hex)
@@ -1831,7 +1853,7 @@ const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
     const entitySelector = this.shadowRoot.querySelector("ha-selector#entity");
     if (entitySelector) {
       entitySelector.hass = this._hass;
-      entitySelector.selector = { entity: { domain: ["light", "fan"] } };
+      entitySelector.selector = { entity: { domain: ["light", "fan", "switch"] } };
       entitySelector.value = this._config.entity || "";
       entitySelector.addEventListener("value-changed", (e) => {
         this._config.entity = e.detail.value;
