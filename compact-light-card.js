@@ -1399,7 +1399,10 @@ const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
 
   setConfig(config) {
     this._config = { ...config };
-    this.render();
+    if (!this._rendered) {
+      this.render();
+      this._rendered = true;
+    }
   }
 
   _hexToRgb(hex) {
@@ -1415,6 +1418,7 @@ const iconPicker = this.shadowRoot?.querySelector("ha-icon-picker");
   }
 
   render() {
+    this._rendered = false;
     if (!this.shadowRoot) return;
 
     // Helper to get colour value for color input (needs to be hex)
